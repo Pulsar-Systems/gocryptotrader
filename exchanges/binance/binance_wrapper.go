@@ -213,6 +213,45 @@ func (b *Binance) SetDefaults() {
 }
 
 // Setup takes in the supplied exchange configuration details and sets params
+func (b *Binance) SetupFuture(exch *config.Exchange) error {
+	err := exch.Validate()
+	if err != nil {
+		return err
+	}
+	if !exch.Enabled {
+		b.SetEnabled(false)
+		return nil
+	}
+	err = b.SetupDefaults(exch)
+	if err != nil {
+		return err
+	}
+	err = b.Websocket.Setup(&stream.WebsocketSetup{
+		ExchangeConfig:        exch,
+		DefaultURL:            "wss://fstream.binance.com/stream?streams=btcusdt@depth",
+		RunningURL:            "wss://fstream.binance.com/stream?streams=btcusdt@depth",
+		Connector:             b.WsUFuturesConnect,
+		Subscriber:            b.Subscribe,
+		Unsubscriber:          b.Unsubscribe,
+		GenerateSubscriptions: b.UFuturesGenerateSubscriptions,
+		Features:              &b.Features.Supports.WebsocketCapabilities,
+		OrderbookBufferConfig: buffer.Config{
+			SortBuffer:            true,
+			SortBufferByUpdateIDs: true,
+		},
+		TradeFeed: b.Features.Enabled.TradeFeed,
+	})
+	if err != nil {
+		return err
+	}
+
+	return b.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		RateLimit:            wsRateLimitMilliseconds,
+	})
+}
+
 func (b *Binance) Setup(exch *config.Exchange) error {
 	err := exch.Validate()
 	if err != nil {

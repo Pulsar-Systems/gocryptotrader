@@ -26,7 +26,7 @@ import (
 	"github.com/thrasher-corp/gocryptotrader/signaler"
 )
 
-func main() {
+func maine() {
 	// Handle flags
 	var settings engine.Settings
 	versionFlag := flag.Bool("version", false, "retrieves current GoCryptoTrader version")
@@ -164,13 +164,13 @@ func main() {
 		}
 	}()
 
-	go waitForInterupt(settings.Shutdown)
+	go waitForInteruptm(settings.Shutdown)
 	<-settings.Shutdown
 	engine.Bot.Stop()
 	gctlog.Infoln(gctlog.Global, "Exiting.")
 }
 
-func waitForInterupt(waiter chan<- struct{}) {
+func waitForInteruptm(waiter chan<- struct{}) {
 	interrupt := signaler.WaitForInterrupt()
 	gctlog.Infof(gctlog.Global, "Captured %v, shutdown requested.\n", interrupt)
 	waiter <- struct{}{}
