@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/thrasher-corp/gocryptotrader/config"
@@ -19,7 +20,8 @@ func main() {
 	interrupt := make(chan struct{})
 
 	c := &config.Config{}
-	err := c.ReadConfigFromFile("../../../.gocryptotrader/config.json", false)
+	home, _ := os.UserHomeDir()
+	err := c.ReadConfigFromFile(home+"/.gocryptotrader/config.json", false)
 	if err != nil {
 		fmt.Println("c.ReadConfigFromFile ", err)
 	}
@@ -49,7 +51,7 @@ func main() {
 		for {
 			orb, err := b.Websocket.Orderbook.GetOrderbook(p, asset.USDTMarginedFutures)
 			if err != nil {
-				fmt.Printf("err: %v\n", err)
+				fmt.Printf("GetOrderbook err: %v\n", err)
 			} else {
 				fmt.Printf("orb.LastUpdateID: %v\n", orb.LastUpdateID)
 				fmt.Printf("orb.Bids: %v\n", orb.Bids[:5])

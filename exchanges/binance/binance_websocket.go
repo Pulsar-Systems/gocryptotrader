@@ -160,6 +160,7 @@ func (b *Binance) wsHandleData(respRaw []byte) error {
 	var multiStreamData map[string]interface{}
 	err := json.Unmarshal(respRaw, &multiStreamData)
 	if err != nil {
+		fmt.Println("err wsHandleData")
 		return err
 	}
 
