@@ -228,8 +228,8 @@ func (b *Binance) SetupFuture(exch *config.Exchange) error {
 	}
 	err = b.Websocket.Setup(&stream.WebsocketSetup{
 		ExchangeConfig:        exch,
-		DefaultURL:            "wss://fstream.binance.com/stream?streams=btcusdt@depth",
-		RunningURL:            "wss://fstream.binance.com/stream?streams=btcusdt@depth",
+		DefaultURL:            "wss://fstream.binance.com/stream",
+		RunningURL:            "wss://fstream.binance.com/stream",
 		Connector:             b.WsUFuturesConnect,
 		Subscriber:            b.Subscribe,
 		Unsubscriber:          b.Unsubscribe,

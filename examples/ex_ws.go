@@ -52,6 +52,7 @@ func main() {
 				fmt.Printf("err: %v\n", err)
 			} else {
 				fmt.Printf("orb.LastUpdateID: %v\n", orb.LastUpdateID)
+				fmt.Printf("orb.Bids: %v\n", orb.Bids[:5])
 			}
 			time.Sleep(time.Second * 1)
 		}

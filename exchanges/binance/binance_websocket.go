@@ -429,6 +429,7 @@ func (b *Binance) wsHandleData(respRaw []byte) error {
 							b.Name,
 							err)
 					}
+					fmt.Printf("SUM SPOT: %v\n", len(depth.UpdateAsks)+len(depth.UpdateBids))
 					init, err := b.UpdateLocalBuffer(&depth)
 					if err != nil {
 						if init {
