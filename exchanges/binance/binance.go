@@ -22,7 +22,7 @@ type Binance struct {
 	exchange.Base
 	// Valid string list that is required by the exchange
 	validLimits []int
-	obm         *orderbookManager
+	obm         map[exchange.URL]*orderbookManager
 }
 
 const (
@@ -102,7 +102,7 @@ const (
 // 		exchange.RestSpotSupplementary, exchangeInfo, spotExchangeInfo, &resp)
 // }
 
-// GetOrderBook returns full orderbook information
+// GetOrderBook returns full Spot orderbook information
 //
 // OrderBookDataRequestParams contains the following members
 // symbol: string of currency pair

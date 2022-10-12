@@ -101,10 +101,10 @@ func (b *Binance) SetDefaults() {
 	if err != nil {
 		log.Errorln(log.ExchangeSys, err)
 	}
-	err = b.DisableAssetWebsocketSupport(asset.USDTMarginedFutures)
-	if err != nil {
-		log.Errorln(log.ExchangeSys, err)
-	}
+	// err = b.DisableAssetWebsocketSupport(asset.USDTMarginedFutures)
+	// if err != nil {
+	// 	log.Errorln(log.ExchangeSys, err)
+	// }
 	b.Features = exchange.Features{
 		Supports: exchange.FeaturesSupported{
 			REST:      true,
@@ -190,56 +190,68 @@ func (b *Binance) SetDefaults() {
 		exchange.RestUSDTMargined:      ufuturesAPIURL,
 		exchange.RestCoinMargined:      cfuturesAPIURL,
 		exchange.EdgeCase1:             "https://www.binance.com",
-		exchange.WebsocketSpot:         binanceDefaultWebsocketURL,
+		exchange.WebsocketSpot:         binanceDefaultWebsocketSpotURL,
+		exchange.WebsocketUFutures:     binanceDefaultWebsocketUFutureURL,
 	})
 	if err != nil {
 		log.Errorln(log.ExchangeSys, err)
 	}
 
-	b.Websocket = stream.New()
+	websocketURLs := []exchange.URL{
+		exchange.WebsocketSpot,
+		exchange.WebsocketUFutures,
+	}
+	b.Websockets = map[exchange.URL]*stream.Websocket{}
+	for _, url := range websocketURLs {
+		b.Websockets[url] = stream.New()
+	}
+	fmt.Println("Websockets map len :", len(b.Websockets))
+	for url := range b.Websockets {
+		fmt.Println("Websocket url:", url)
+	}
 	b.WebsocketResponseMaxLimit = exchange.DefaultWebsocketResponseMaxLimit
 	b.WebsocketResponseCheckTimeout = exchange.DefaultWebsocketResponseCheckTimeout
 }
 
 // Setup takes in the supplied exchange configuration details and sets params
-func (b *Binance) SetupFuture(exch *config.Exchange) error {
-	err := exch.Validate()
-	if err != nil {
-		return err
-	}
-	if !exch.Enabled {
-		b.SetEnabled(false)
-		return nil
-	}
-	err = b.SetupDefaults(exch)
-	if err != nil {
-		return err
-	}
-	err = b.Websocket.Setup(&stream.WebsocketSetup{
-		ExchangeConfig:        exch,
-		DefaultURL:            "wss://fstream.binance.com/stream",
-		RunningURL:            "wss://fstream.binance.com/stream",
-		Connector:             b.WsUFuturesConnect,
-		Subscriber:            b.Subscribe,
-		Unsubscriber:          b.Unsubscribe,
-		GenerateSubscriptions: b.UFuturesGenerateSubscriptions,
-		Features:              &b.Features.Supports.WebsocketCapabilities,
-		OrderbookBufferConfig: buffer.Config{
-			SortBuffer:            true,
-			SortBufferByUpdateIDs: true,
-		},
-		TradeFeed: b.Features.Enabled.TradeFeed,
-	})
-	if err != nil {
-		return err
-	}
+// func (b *Binance) SetupFuture(exch *config.Exchange) error {
+// 	err := exch.Validate()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if !exch.Enabled {
+// 		b.SetEnabled(false)
+// 		return nil
+// 	}
+// 	err = b.SetupDefaults(exch)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	err = b.Websocket.Setup(&stream.WebsocketSetup{
+// 		ExchangeConfig:        exch,
+// 		DefaultURL:            "wss://fstream.binance.com/stream",
+// 		RunningURL:            "wss://fstream.binance.com/stream",
+// 		Connector:             b.WsUFuturesConnect,
+// 		Subscriber:            b.Subscribe,
+// 		Unsubscriber:          b.Unsubscribe,
+// 		GenerateSubscriptions: b.UFuturesGenerateSubscriptions,
+// 		Features:              &b.Features.Supports.WebsocketCapabilities,
+// 		OrderbookBufferConfig: buffer.Config{
+// 			SortBuffer:            true,
+// 			SortBufferByUpdateIDs: true,
+// 		},
+// 		TradeFeed: b.Features.Enabled.TradeFeed,
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
 
-	return b.Websocket.SetupNewConnection(stream.ConnectionSetup{
-		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-		RateLimit:            wsRateLimitMilliseconds,
-	})
-}
+// 	return b.Websocket.SetupNewConnection(stream.ConnectionSetup{
+// 		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+// 		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+// 		RateLimit:            wsRateLimitMilliseconds,
+// 	})
+// }
 
 func (b *Binance) Setup(exch *config.Exchange) error {
 	err := exch.Validate()
@@ -254,34 +266,43 @@ func (b *Binance) Setup(exch *config.Exchange) error {
 	if err != nil {
 		return err
 	}
-	ePoint, err := b.API.Endpoints.GetURL(exchange.WebsocketSpot)
-	if err != nil {
-		return err
-	}
-	err = b.Websocket.Setup(&stream.WebsocketSetup{
-		ExchangeConfig:        exch,
-		DefaultURL:            binanceDefaultWebsocketURL,
-		RunningURL:            ePoint,
-		Connector:             b.WsConnect,
-		Subscriber:            b.Subscribe,
-		Unsubscriber:          b.Unsubscribe,
-		GenerateSubscriptions: b.GenerateSubscriptions,
-		Features:              &b.Features.Supports.WebsocketCapabilities,
-		OrderbookBufferConfig: buffer.Config{
-			SortBuffer:            true,
-			SortBufferByUpdateIDs: true,
-		},
-		TradeFeed: b.Features.Enabled.TradeFeed,
-	})
-	if err != nil {
-		return err
-	}
 
-	return b.Websocket.SetupNewConnection(stream.ConnectionSetup{
-		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-		RateLimit:            wsRateLimitMilliseconds,
-	})
+	// assetToURL := map[asset.Item]exchange.URL{
+	// 	asset.Spot:                exchange.WebsocketSpot,
+	// 	asset.USDTMarginedFutures: exchange.WebsocketUFutures,
+	// }
+	for url, bWebsocket := range b.Websockets {
+		fmt.Println("Setting bWebsocket: ", url)
+		ePoint, err := b.API.Endpoints.GetURL(url)
+		if err != nil {
+			return err
+		}
+		err = bWebsocket.Setup(&stream.WebsocketSetup{
+			ExchangeConfig:        exch,
+			DefaultURL:            binanceDefaultWebsocketSpotURL,
+			RunningURL:            ePoint,
+			Connector:             b.WsConnectFactory(url), //todo: the function sets the orderbook, should be extracted outside
+			Subscriber:            b.WsSubscribeFactory(url),
+			Unsubscriber:          b.WsUnsubscribeFactory(url),
+			GenerateSubscriptions: b.WsGenerateSubscriptionsFactory(url),
+			Features:              &b.Features.Supports.WebsocketCapabilities,
+			OrderbookBufferConfig: buffer.Config{
+				SortBuffer:            true,
+				SortBufferByUpdateIDs: true,
+			},
+			TradeFeed: b.Features.Enabled.TradeFeed,
+		})
+		if err != nil {
+			return err
+		}
+
+		err = bWebsocket.SetupNewConnection(stream.ConnectionSetup{
+			ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+			ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+			RateLimit:            wsRateLimitMilliseconds,
+		})
+	}
+	return nil
 }
 
 // Start starts the Binance go routine
@@ -300,24 +321,26 @@ func (b *Binance) Start(wg *sync.WaitGroup) error {
 // Run implements the Binance wrapper
 func (b *Binance) Run() {
 	if b.Verbose {
-		log.Debugf(log.ExchangeSys,
-			"%s Websocket: %s. (url: %s).\n",
-			b.Name,
-			common.IsEnabled(b.Websocket.IsEnabled()),
-			b.Websocket.GetWebsocketURL())
+		for _, bWebsocket := range b.Websockets {
+			log.Debugf(log.ExchangeSys,
+				"%s Websocket: %s. (url: %s).\n",
+				b.Name,
+				common.IsEnabled(bWebsocket.IsEnabled()),
+				bWebsocket.GetWebsocketURL())
+		}
 		b.PrintEnabledPairs()
 	}
 
 	forceUpdate := false
-	a := b.GetAssetTypes(true)
-	for x := range a {
-		if err := b.UpdateOrderExecutionLimits(context.TODO(), a[x]); err != nil {
+	assets := b.GetAssetTypes(true)
+	for x := range assets {
+		if err := b.UpdateOrderExecutionLimits(context.TODO(), assets[x]); err != nil {
 			log.Errorf(log.ExchangeSys,
 				"%s failed to set exchange order execution limits. Err: %v",
 				b.Name,
 				err)
 		}
-		if a[x] == asset.USDTMarginedFutures && !b.BypassConfigFormatUpgrades {
+		if assets[x] == asset.USDTMarginedFutures && !b.BypassConfigFormatUpgrades {
 			format, err := b.GetPairFormat(asset.USDTMarginedFutures, false)
 			if err != nil {
 				log.Errorf(log.ExchangeSys, "%s failed to get enabled currencies. Err %s\n",
@@ -352,9 +375,9 @@ func (b *Binance) Run() {
 						b.Name,
 						err)
 				} else {
-					log.Warnf(log.ExchangeSys, exchange.ResetConfigPairsWarningMessage, b.Name, a[x], enabledPairs)
+					log.Warnf(log.ExchangeSys, exchange.ResetConfigPairsWarningMessage, b.Name, assets[x], enabledPairs)
 					forceUpdate = true
-					err = b.UpdatePairs(enabledPairs, a[x], true, true)
+					err = b.UpdatePairs(enabledPairs, assets[x], true, true)
 					if err != nil {
 						log.Errorf(log.ExchangeSys,
 							"%s failed to update currencies. Err: %s\n",

@@ -221,7 +221,7 @@ type Base struct {
 	WebsocketResponseCheckTimeout time.Duration
 	WebsocketResponseMaxLimit     time.Duration
 	WebsocketOrderbookBufferLimit int64
-	Websocket                     *stream.Websocket
+	Websockets                    map[URL]*(stream.Websocket)
 	*request.Requester
 	Config        *config.Exchange
 	settingsMutex sync.RWMutex
@@ -247,6 +247,7 @@ const (
 	RestSwap
 	RestSandbox
 	WebsocketSpot
+	WebsocketUFutures
 	WebsocketSpotSupplementary
 	ChainAnalysis
 	EdgeCase1
@@ -262,6 +263,7 @@ const (
 	restSandboxURL                = "RestSandboxURL"
 	restSwapURL                   = "RestSwapURL"
 	websocketSpotURL              = "WebsocketSpotURL"
+	websocketUFuturesURL          = "WebsocketUFuturesURL"
 	websocketSpotSupplementaryURL = "WebsocketSpotSupplementaryURL"
 	chainAnalysisURL              = "ChainAnalysisURL"
 	edgeCase1URL                  = "EdgeCase1URL"
@@ -278,6 +280,7 @@ var keyURLs = []URL{RestSpot,
 	RestSwap,
 	RestSandbox,
 	WebsocketSpot,
+	WebsocketUFutures,
 	WebsocketSpotSupplementary,
 	ChainAnalysis,
 	EdgeCase1,

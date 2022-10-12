@@ -49,26 +49,26 @@ var (
 
 // SetClientProxyAddress sets a proxy address for REST and websocket requests
 func (b *Base) SetClientProxyAddress(addr string) error {
-	if addr == "" {
-		return nil
-	}
-	proxy, err := url.Parse(addr)
-	if err != nil {
-		return fmt.Errorf("setting proxy address error %s",
-			err)
-	}
+	// if addr == "" {
+	// 	return nil
+	// }
+	// proxy, err := url.Parse(addr)
+	// if err != nil {
+	// 	return fmt.Errorf("setting proxy address error %s",
+	// 		err)
+	// }
 
-	err = b.Requester.SetProxy(proxy)
-	if err != nil {
-		return err
-	}
+	// err = b.Requester.SetProxy(proxy)
+	// if err != nil {
+	// 	return err
+	// }
 
-	if b.Websocket != nil {
-		err = b.Websocket.SetProxyAddress(addr)
-		if err != nil {
-			return err
-		}
-	}
+	// if b.Websocket != nil {
+	// 	err = b.Websocket.SetProxyAddress(addr)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 	return nil
 }
 
@@ -1052,10 +1052,11 @@ func (b *Base) SetGlobalPairsManager(request, config *currency.PairFormat, asset
 
 // GetWebsocket returns a pointer to the exchange websocket
 func (b *Base) GetWebsocket() (*stream.Websocket, error) {
-	if b.Websocket == nil {
+	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
+	if !ok || bWebsocket == nil {
 		return nil, common.ErrFunctionNotSupported
 	}
-	return b.Websocket, nil
+	return bWebsocket, nil
 }
 
 // SupportsWebsocket returns whether or not the exchange supports
@@ -1067,45 +1068,50 @@ func (b *Base) SupportsWebsocket() bool {
 // IsWebsocketEnabled returns whether or not the exchange has its
 // websocket client enabled
 func (b *Base) IsWebsocketEnabled() bool {
-	if b.Websocket == nil {
+	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
+	if !ok || bWebsocket == nil {
 		return false
 	}
-	return b.Websocket.IsEnabled()
+	return bWebsocket.IsEnabled()
 }
 
 // FlushWebsocketChannels refreshes websocket channel subscriptions based on
 // websocket features. Used in the event of a pair/asset or subscription change.
 func (b *Base) FlushWebsocketChannels() error {
-	if b.Websocket == nil {
+	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
+	if !ok || bWebsocket == nil {
 		return nil
 	}
-	return b.Websocket.FlushChannels()
+	return bWebsocket.FlushChannels()
 }
 
 // SubscribeToWebsocketChannels appends to ChannelsToSubscribe
 // which lets websocket.manageSubscriptions handle subscribing
 func (b *Base) SubscribeToWebsocketChannels(channels []stream.ChannelSubscription) error {
-	if b.Websocket == nil {
+	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
+	if !ok || bWebsocket == nil {
 		return common.ErrFunctionNotSupported
 	}
-	return b.Websocket.SubscribeToChannels(channels)
+	return bWebsocket.SubscribeToChannels(channels)
 }
 
 // UnsubscribeToWebsocketChannels removes from ChannelsToSubscribe
 // which lets websocket.manageSubscriptions handle unsubscribing
 func (b *Base) UnsubscribeToWebsocketChannels(channels []stream.ChannelSubscription) error {
-	if b.Websocket == nil {
+	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
+	if !ok || bWebsocket == nil {
 		return common.ErrFunctionNotSupported
 	}
-	return b.Websocket.UnsubscribeChannels(channels)
+	return bWebsocket.UnsubscribeChannels(channels)
 }
 
 // GetSubscriptions returns a copied list of subscriptions
 func (b *Base) GetSubscriptions() ([]stream.ChannelSubscription, error) {
-	if b.Websocket == nil {
+	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
+	if !ok || bWebsocket == nil {
 		return nil, common.ErrFunctionNotSupported
 	}
-	return b.Websocket.GetSubscriptions(), nil
+	return bWebsocket.GetSubscriptions(), nil
 }
 
 // AuthenticateWebsocket sends an authentication message to the websocket
@@ -1272,6 +1278,9 @@ func (e *Endpoints) GetURL(key URL) (string, error) {
 	defer e.mu.RUnlock()
 	val, ok := e.defaults[key.String()]
 	if !ok {
+		for k, v := range e.defaults {
+			fmt.Printf("key[%s] = value[%s]\n", k, v)
+		}
 		return "", fmt.Errorf("no endpoint path found for the given key: %v", key)
 	}
 	return val, nil
@@ -1317,6 +1326,8 @@ func (u URL) String() string {
 		return restSwapURL
 	case WebsocketSpot:
 		return websocketSpotURL
+	case WebsocketUFutures:
+		return websocketUFuturesURL
 	case WebsocketSpotSupplementary:
 		return websocketSpotSupplementaryURL
 	case ChainAnalysis:
@@ -1353,6 +1364,8 @@ func getURLTypeFromString(ep string) (URL, error) {
 		return RestSwap, nil
 	case websocketSpotURL:
 		return WebsocketSpot, nil
+	case websocketUFuturesURL:
+		return WebsocketUFutures, nil
 	case websocketSpotSupplementaryURL:
 		return WebsocketSpotSupplementary, nil
 	case chainAnalysisURL:
@@ -1365,6 +1378,28 @@ func getURLTypeFromString(ep string) (URL, error) {
 		return EdgeCase3, nil
 	default:
 		return Invalid, fmt.Errorf("%w for %s", errEndpointStringNotFound, ep)
+	}
+}
+
+func GetURLTypeFromAsset(a asset.Item) (URL, error) {
+	switch a {
+	case asset.Spot:
+		return WebsocketSpot, nil
+	case asset.USDTMarginedFutures:
+		return WebsocketUFutures, nil
+	default:
+		return Invalid, fmt.Errorf("%w for %s", errors.New("invalid asset"), a)
+	}
+}
+
+func GetAssetsFromURLType(url URL) ([]asset.Item, error) {
+	switch url {
+	case WebsocketSpot:
+		return []asset.Item{asset.Spot}, nil
+	case WebsocketUFutures:
+		return []asset.Item{asset.USDTMarginedFutures}, nil
+	default:
+		return []asset.Item{}, fmt.Errorf("%w for %s", errors.New("websockets URL not supported"), url)
 	}
 }
 
