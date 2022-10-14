@@ -548,7 +548,7 @@ type wsOrderFilled struct {
 type WsFuturesOrderbookData struct {
 	Price  float64 `json:"price,string"`
 	Symbol string  `json:"symbol"`
-	ID     int64   `json:"id"`
+	ID     int64   `json:"id,string"`
 	Side   string  `json:"side"`
 	Size   float64 `json:"size"`
 }
@@ -563,7 +563,7 @@ type WsFuturesOrderbook struct {
 // WsUSDTOrderbook stores ws usdt orderbook
 type WsUSDTOrderbook struct {
 	Topic string `json:"topic"`
-	Type  string `json:"string"`
+	Type  string `json:"type"`
 	Data  struct {
 		OBData []WsFuturesOrderbookData `json:"order_book"`
 	} `json:"data"`

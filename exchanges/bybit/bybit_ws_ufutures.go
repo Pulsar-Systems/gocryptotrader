@@ -161,6 +161,14 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 	if err != nil {
 		return err
 	}
+	// Handle the initial websocket subscribe sucess data, previously was not in the library
+	s, ok := multiStreamData["success"].(bool)
+	if ok {
+		if !s {
+			log.Errorf(log.ExchangeSys, "%s Websocket connection was unsuccessfull: %v\n", by.Name, multiStreamData)
+		}
+		return nil
+	}
 
 	t, ok := multiStreamData["topic"].(string)
 	if !ok {

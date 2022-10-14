@@ -214,6 +214,48 @@ func (by *Bybit) GenerateDefaultSubscriptions() ([]stream.ChannelSubscription, e
 	return subscriptions, nil
 }
 
+const (
+	wsTickerFutures    = "instrument_info.100ms"
+	wsTradesFutures    = "trade" // Same as spot
+	wsOrderbookFutures = "orderBook_200.100ms"
+	wsKlinesFutures    = "candle.1"
+)
+
+func (by *Bybit) GenerateDefaultSubscriptionsUFutures() ([]stream.ChannelSubscription, error) {
+	var subscriptions []stream.ChannelSubscription
+	var channels = []string{wsTickerFutures, wsTradesFutures, wsOrderbookFutures, wsKlinesFutures}
+	pairs, err := by.GetEnabledPairs(asset.USDTMarginedFutures)
+	if err != nil {
+		return nil, err
+	}
+	for z := range pairs {
+		for x := range channels {
+			subscriptions = append(subscriptions,
+				stream.ChannelSubscription{
+					Channel:  channels[x],
+					Currency: pairs[z],
+					Asset:    asset.USDTMarginedFutures,
+					Params: map[string]interface{}{
+						"pair": strings.Replace(pairs[z].String(), "-", "", -1),
+					},
+				})
+		}
+	}
+	return subscriptions, nil
+}
+
+func (by *Bybit) GenerateDefaultSubscriptionsFactory(a asset.Item) func() ([]stream.ChannelSubscription, error) {
+	switch a {
+	case asset.Spot:
+		return by.GenerateDefaultSubscriptions
+	case asset.USDTMarginedFutures:
+		return by.GenerateDefaultSubscriptionsUFutures
+	default:
+		// For now return nil for unsupported assets
+		return nil
+	}
+}
+
 func stringToOrderStatus(status string) (order.Status, error) {
 	switch status {
 	case "NEW":
@@ -323,7 +365,6 @@ func (by *Bybit) wsHandleData(respRaw []byte) error {
 				if err != nil {
 					return err
 				}
-
 				by.Websocket.DataHandler <- &ticker.Price{
 					ExchangeName: by.Name,
 					Bid:          data.Ticker.Bid,

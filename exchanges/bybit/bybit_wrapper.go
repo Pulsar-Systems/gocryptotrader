@@ -206,7 +206,61 @@ func (by *Bybit) Setup(exch *config.Exchange) error {
 			Connector:             by.WsConnect,
 			Subscriber:            by.Subscribe,
 			Unsubscriber:          by.Unsubscribe,
-			GenerateSubscriptions: by.GenerateDefaultSubscriptions,
+			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.Spot),
+			Features:              &by.Features.Supports.WebsocketCapabilities,
+			OrderbookBufferConfig: buffer.Config{
+				SortBuffer:            true,
+				SortBufferByUpdateIDs: true,
+			},
+			TradeFeed: by.Features.Enabled.TradeFeed,
+		})
+	if err != nil {
+		return err
+	}
+
+	err = by.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  by.Websocket.GetWebsocketURL(),
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+	})
+	if err != nil {
+		return err
+	}
+
+	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  bybitWSBaseURL + wsSpotPrivate,
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		Authenticated:        true,
+	})
+}
+
+func (by *Bybit) SetupFuture(exch *config.Exchange) error {
+	if !exch.Enabled {
+		by.SetEnabled(false)
+		return nil
+	}
+
+	err := by.SetupDefaults(exch)
+	if err != nil {
+		return err
+	}
+
+	// wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
+	if err != nil {
+		return err
+	}
+
+	err = by.Websocket.Setup(
+		&stream.WebsocketSetup{
+			ExchangeConfig:        exch,
+			DefaultURL:            "wss://stream.bybit.com/realtime_public",
+			RunningURL:            "wss://stream.bybit.com/realtime_public",
+			RunningURLAuth:        "wss://stream.bybit.com/realtime_private",
+			Connector:             by.WsUSDTConnect,
+			Subscriber:            by.SubscribeFutures,
+			Unsubscriber:          by.UnsubscribeFutures,
+			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.USDTMarginedFutures),
 			Features:              &by.Features.Supports.WebsocketCapabilities,
 			OrderbookBufferConfig: buffer.Config{
 				SortBuffer:            true,

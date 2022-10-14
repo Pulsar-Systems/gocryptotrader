@@ -707,7 +707,7 @@ func (by *Bybit) processOrderbook(data []WsFuturesOrderbookData, action string, 
 	if len(data) < 1 {
 		return errors.New("no orderbook data")
 	}
-
+	
 	switch action {
 	case wsOperationSnapshot:
 		var book orderbook.Base
@@ -727,6 +727,9 @@ func (by *Bybit) processOrderbook(data []WsFuturesOrderbookData, action string, 
 					data[i].Side)
 			}
 		}
+		// For some reason Bybit sends the orderbook in a single list imitating a spread
+		// Therefore the orderbook bids must be reversed
+		book.Bids.Reverse()
 		book.Asset = a
 		book.Pair = p
 		book.Exchange = by.Name
