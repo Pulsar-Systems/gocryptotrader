@@ -92,8 +92,7 @@ type bybitTimeMilliSec time.Time
 
 // UnmarshalJSON is custom type json unmarshaller for bybitTimeMilliSec
 func (b *bybitTimeMilliSec) UnmarshalJSON(data []byte) error {
-	var timestamp int64
-	err := json.Unmarshal(data, &timestamp)
+	timestamp, err := strconv.ParseInt(string(data), 10, 64)
 	if err != nil {
 		return err
 	}
@@ -583,11 +582,11 @@ type WsCoinDeltaOrderbook struct {
 // WsFuturesTradeData stores ws future trade data
 type WsFuturesTradeData struct {
 	Time               time.Time         `json:"timestamp"`
-	TimeInMilliseconds bybitTimeMilliSec `json:"trade_time_ms"`
+	TimeInMilliseconds bybitTimeMilliSec `json:"trade_time_ms,string"`
 	Symbol             string            `json:"symbol"`
 	Side               string            `json:"side"`
 	Size               float64           `json:"size"`
-	Price              float64           `json:"price"`
+	Price              float64           `json:"price,string"`
 	Direction          string            `json:"tick_direction"`
 	ID                 string            `json:"trade_id"`
 }
@@ -606,8 +605,8 @@ type WsFuturesKlineData struct {
 	Open      float64           `json:"open"`
 	High      float64           `json:"high"`
 	Low       float64           `json:"low"`
-	Volume    float64           `json:"volume"`
-	TurnOver  float64           `json:"turnover"`
+	Volume    float64           `json:"volume,string"`
+	TurnOver  float64           `json:"turnover,string"`
 	Confirm   bool              `json:"confirm"`
 	Timestamp bybitTimeMilliSec `json:"timestamp"`
 }
@@ -633,28 +632,28 @@ type WsInsurance struct {
 
 // WsTickerData stores ws ticker data
 type WsTickerData struct {
-	ID                    string    `json:"id"`
+	ID                    int64     `json:"id"`
 	Symbol                string    `json:"symbol"`
 	LastPrice             float64   `json:"last_price,string"`
-	BidPrice              float64   `json:"bid1_price"`
-	AskPrice              float64   `json:"ask1_price"`
+	BidPrice              float64   `json:"bid1_price,string"`
+	AskPrice              float64   `json:"ask1_price,string"`
 	LastDirection         string    `json:"last_tick_direction"`
 	PrevPrice24h          float64   `json:"prev_price_24h,string"`
-	Price24hPercentChange float64   `json:"price_24h_pcnt_e6"`
-	Price1hPercentChange  float64   `json:"price_1h_pcnt_e6"`
+	Price24hPercentChange float64   `json:"price_24h_pcnt_e6,string"`
+	Price1hPercentChange  float64   `json:"price_1h_pcnt_e6,string"`
 	HighPrice24h          float64   `json:"high_price_24h,string"`
 	LowPrice24h           float64   `json:"low_price_24h,string"`
 	PrevPrice1h           float64   `json:"prev_price_1h,string"`
 	MarkPrice             float64   `json:"mark_price,string"`
 	IndexPrice            float64   `json:"index_price,string"`
-	OpenInterest          float64   `json:"open_interest"`
-	OpenValue             float64   `json:"open_value_e8"`
-	TotalTurnOver         float64   `json:"total_turnover_e8"`
-	TurnOver24h           float64   `json:"turnover_24h_e8"`
-	TotalVolume           float64   `json:"total_volume"`
-	Volume24h             float64   `json:"volume_24h"`
-	FundingRate           int64     `json:"funding_rate_e6"`
-	PredictedFundingRate  float64   `json:"predicted_funding_rate_e6"`
+	OpenInterest          float64   `json:"open_interest,string"`
+	OpenValue             float64   `json:"open_value_e8,string"`
+	TotalTurnOver         float64   `json:"total_turnover_e8,string"`
+	TurnOver24h           float64   `json:"turnover_24h_e8,string"`
+	TotalVolume           float64   `json:"total_volume,string"`
+	Volume24h             float64   `json:"volume_24h,string"`
+	FundingRate           int64     `json:"funding_rate_e6,string"`
+	PredictedFundingRate  float64   `json:"predicted_funding_rate_e6,string"`
 	CreatedAt             time.Time `json:"created_at"`
 	UpdateAt              time.Time `json:"updated_at"`
 	NextFundingAt         time.Time `json:"next_funding_time"`

@@ -258,8 +258,8 @@ func (by *Bybit) SetupFuture(exch *config.Exchange) error {
 			RunningURL:            "wss://stream.bybit.com/realtime_public",
 			RunningURLAuth:        "wss://stream.bybit.com/realtime_private",
 			Connector:             by.WsUSDTConnect,
-			Subscriber:            by.SubscribeFutures,
-			Unsubscriber:          by.UnsubscribeFutures,
+			Subscriber:            by.SubscribeUSDT,
+			Unsubscriber:          by.UnsubscribeUSDT,
 			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.USDTMarginedFutures),
 			Features:              &by.Features.Supports.WebsocketCapabilities,
 			OrderbookBufferConfig: buffer.Config{
