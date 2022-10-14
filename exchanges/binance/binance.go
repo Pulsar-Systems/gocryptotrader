@@ -15,6 +15,7 @@ import (
 	exchange "github.com/thrasher-corp/gocryptotrader/exchanges"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
 )
 
 // Binance is the overarching type across the Binance package
@@ -23,6 +24,15 @@ type Binance struct {
 	// Valid string list that is required by the exchange
 	validLimits []int
 	obm         map[exchange.URL]*orderbookManager
+	// Websockets  map[exchange.URL]*(stream.Websocket)
+}
+
+func (b *Binance) GetWebsocket() (*stream.Websocket, error) {
+	bWebsocket, ok := b.Websockets[exchange.WebsocketSpot] // todo
+	if !ok || bWebsocket == nil {
+		return nil, common.ErrFunctionNotSupported
+	}
+	return bWebsocket, nil
 }
 
 const (

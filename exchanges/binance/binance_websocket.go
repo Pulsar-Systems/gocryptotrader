@@ -174,18 +174,18 @@ func (b *Binance) setupOrderbookManager(url exchange.URL) {
 				jobs:  make(chan job, maxWSOrderbookJobs),
 			}
 		} else {
-			urlAssets, err := exchange.GetAssetsFromURLType(url)
-			_ = err // todo
+			// urlAssets, err := exchange.GetAssetsFromURLType(url)
+			// _ = err // todo
 			// Change state on reconnect for initial sync.
 			for _, m1 := range obm.state {
 				for _, m2 := range m1 {
-					// for _, update := range m2 {
-					for _, a := range urlAssets {
-						if update, ok := m2[a]; ok {
-							update.initialSync = true
-							update.needsFetchingBook = true
-							update.lastUpdateID = 0
-						}
+					for _, update := range m2 {
+						// for _, a := range urlAssets {
+						// if update, ok := m2[a]; ok {
+						update.initialSync = true
+						update.needsFetchingBook = true
+						update.lastUpdateID = 0
+						// }
 					}
 				}
 			}
@@ -228,6 +228,7 @@ func (b *Binance) wsReadData(bWebsocket *stream.Websocket, url exchange.URL) {
 		case exchange.WebsocketSpot:
 			err = b.wsHandleData(resp.Raw, bWebsocket)
 		case exchange.WebsocketUFutures:
+			// fmt.Println("wsReadData sending data to wsHandleUFutureData")
 			err = b.wsHandleUFutureData(resp.Raw, bWebsocket)
 		}
 		if err != nil {
@@ -807,7 +808,7 @@ func (b *Binance) wsHandleUFutureData(respRaw []byte, bWebsocket *stream.Websock
 							b.Name,
 							err)
 					}
-					// fmt.Printf("SUM UFUTURE: %v\n", len(depth.UpdateAsks)+len(depth.UpdateBids))
+					// fmt.Println("PU=", depth.LastUpdateIDPrevStream)
 					init, err := b.UpdateLocalBuffer(&depth, assetUsed)
 					if err != nil {
 						if init {
@@ -910,19 +911,24 @@ func (b *Binance) UpdateLocalBuffer(wsdp *WebsocketDepthStream, assetToUpdate as
 		return false, err
 	}
 
-	currencyPair, err := currency.NewPairFromFormattedPairs(wsdp.Pair,
-		enabledPairs,
-		format)
+	currencyPair, err := currency.NewPairFromFormattedPairs(wsdp.Pair, enabledPairs, format)
 	if err != nil {
 		return false, err
 	}
 
+	// fmt.Println("UpdateLocalBuffer with asset:", assetToUpdate)
 	wsURLType, err := exchange.GetURLTypeFromAsset(assetToUpdate)
+	if err != nil {
+		return false, err
+	}
 	obm, exist := b.obm[wsURLType]
-	_ = exist // todo
+	if !exist {
+		return false, errors.New("orderbook doesn't exist, wsURL:" + wsURLType.String())
+	}
 	err = obm.stageWsUpdate(wsdp, currencyPair, assetToUpdate)
 	if err != nil {
 		init, err2 := obm.checkIsInitialSync(currencyPair, assetToUpdate)
+		fmt.Println("stageWsUpdate failed:", assetToUpdate, "Initial sync:", init)
 		if err2 != nil {
 			return false, err2
 		}
@@ -1026,6 +1032,7 @@ func (b *Binance) WsUnsubscribeFactory(wsURLType exchange.URL) func([]stream.Cha
 
 // ProcessUpdate processes the websocket orderbook update
 func (b *Binance) ProcessUpdate(cp currency.Pair, a asset.Item, ws *WebsocketDepthStream) error {
+	fmt.Println("Calling ProcessUpdate asset:", a)
 	updateBid := make([]orderbook.Item, len(ws.UpdateBids))
 	for i := range ws.UpdateBids {
 		price, ok := ws.UpdateBids[i][0].(string)
@@ -1068,8 +1075,14 @@ func (b *Binance) ProcessUpdate(cp currency.Pair, a asset.Item, ws *WebsocketDep
 		updateAsk[i] = orderbook.Item{Price: p, Amount: a}
 	}
 
-	wsURLType, _ := exchange.GetURLTypeFromAsset(a) // todo
-	bWebsocket, _ := b.Websockets[wsURLType]        // todo
+	wsURLType, err := exchange.GetURLTypeFromAsset(a)
+	if err != nil {
+		return err
+	}
+	bWebsocket, exist := b.Websockets[wsURLType] // todo
+	if !exist {
+		return errors.New("does not exist ws with URL:" + wsURLType.String())
+	}
 	return bWebsocket.Orderbook.Update(&orderbook.Update{
 		Bids:       updateBid,
 		Asks:       updateAsk,
@@ -1083,9 +1096,15 @@ func (b *Binance) ProcessUpdate(cp currency.Pair, a asset.Item, ws *WebsocketDep
 // applyBufferUpdate applies the buffer to the orderbook or initiates a new
 // orderbook sync by the REST protocol which is off handed to go routine.
 func (b *Binance) applyBufferUpdate(pair currency.Pair, assetToUpdate asset.Item) error {
+	// fmt.Println("applyBufferUpdate", assetToUpdate, len(b.obm))
 	wsURLType, err := exchange.GetURLTypeFromAsset(assetToUpdate)
+	if err != nil {
+		return err
+	}
 	obm, exist := b.obm[wsURLType]
-	_ = exist // todo
+	if !exist {
+		return errors.New("orderbook doesn't exist url:" + wsURLType.String())
+	}
 	fetching, needsFetching, err := obm.handleFetchingBook(pair, assetToUpdate)
 	if err != nil {
 		return err
@@ -1099,10 +1118,10 @@ func (b *Binance) applyBufferUpdate(pair currency.Pair, assetToUpdate asset.Item
 		}
 		return obm.fetchBookViaREST(pair, assetToUpdate)
 	}
-	url, err := exchange.GetURLTypeFromAsset(assetToUpdate)
-	bWebsocket := b.Websockets[url]
+	bWebsocket := b.Websockets[wsURLType]
 	recent, err := bWebsocket.Orderbook.GetOrderbook(pair, assetToUpdate)
 	if err != nil {
+		fmt.Println("No recent orderbook:", wsURLType)
 		log.Errorf(
 			log.WebsocketMgr,
 			"%s error fetching recent orderbook when applying updates: %s\n",
@@ -1220,6 +1239,7 @@ func (b *Binance) flushAndCleanup(pair currency.Pair, asset asset.Item) {
 // stageWsUpdate stages websocket update to roll through updates that need to
 // be applied to a fetched orderbook via REST.
 func (o *orderbookManager) stageWsUpdate(u *WebsocketDepthStream, pair currency.Pair, a asset.Item) error {
+	// fmt.Println("Calling stageWsUpdate:", a, u.Timestamp)
 	o.Lock()
 	defer o.Unlock()
 	m1, ok := o.state[pair.Base]
@@ -1247,16 +1267,27 @@ func (o *orderbookManager) stageWsUpdate(u *WebsocketDepthStream, pair currency.
 		m2[a] = state
 	}
 
-	if state.lastUpdateID != 0 && u.FirstUpdateID != state.lastUpdateID+1 { // todo: ufutures use different check
-		// While listening to the stream, each new event's U should be
-		// equal to the previous event's u+1.
-		return fmt.Errorf("websocket orderbook synchronisation failure for pair %s and asset %s", pair, a)
+	if state.lastUpdateID != 0 {
+		if a == asset.USDTMarginedFutures {
+			if u.LastUpdateIDPrevStream != state.lastUpdateID {
+				// While listening to the stream, each new event's U should have
+				// pu equal to the previous event's u.
+				fmt.Println("pu=", u.LastUpdateIDPrevStream, "lastu=", state.lastUpdateID)
+				return fmt.Errorf("PU websocket orderbook synchronisation failure for pair %s and asset %s", pair, a)
+			}
+		} else if u.FirstUpdateID != state.lastUpdateID+1 {
+			// While listening to the stream, each new event's U should be
+			// equal to the previous event's u+1.
+			return fmt.Errorf("websocket orderbook synchronisation failure for pair %s and asset %s", pair, a)
+		}
 	}
+	fmt.Println("Setting lastUpdateID:", u.LastUpdateID)
 	state.lastUpdateID = u.LastUpdateID
 
 	select {
 	// Put update in the channel buffer to be processed
 	case state.buffer <- u:
+		// fmt.Println("stageWsUpdate put the update to buffer:", a)
 		return nil
 	default:
 		<-state.buffer    // pop one element
@@ -1322,15 +1353,15 @@ func (o *orderbookManager) completeInitialSync(pair currency.Pair, a asset.Item)
 
 // checkIsInitialSync checks status if the book is Initial Sync being via the REST
 // protocol.
-func (o *orderbookManager) checkIsInitialSync(pair currency.Pair, asset asset.Item) (bool, error) {
+func (o *orderbookManager) checkIsInitialSync(pair currency.Pair, a asset.Item) (bool, error) {
 	o.Lock()
 	defer o.Unlock()
-	state, ok := o.state[pair.Base][pair.Quote][asset]
+	state, ok := o.state[pair.Base][pair.Quote][a]
 	if !ok {
 		return false,
 			fmt.Errorf("checkIsInitialSync of orderbook cannot match currency pair %s asset type %s",
 				pair,
-				asset)
+				a)
 	}
 	return state.initialSync, nil
 }
@@ -1372,11 +1403,22 @@ buffer:
 	for {
 		select {
 		case d := <-state.buffer:
-			process, err := state.validate(d, recent)
+			// fmt.Println("2.checkAndProcessUpdate getting depth from buffer", assetToUpdate)
+			var process bool
+			var err error
+			if assetToUpdate == asset.USDTMarginedFutures {
+				// fmt.Println("Calling validate ufuture")
+				process, err = state.validateUFutures(d, recent)
+			} else {
+				// fmt.Println("Calling validate OTHER")
+				process, err = state.validate(d, recent)
+			}
 			if err != nil {
+				fmt.Println("depth update NOT VALIDATED", err)
 				return err
 			}
 			if process {
+				// fmt.Println("3.checkAndProcessUpdate processing depth", assetToUpdate)
 				err := processor(pair, assetToUpdate, d)
 				if err != nil {
 					return fmt.Errorf("%s %s processing update error: %w", pair, assetToUpdate, err)
@@ -1391,6 +1433,7 @@ buffer:
 
 // validate checks for correct update alignment
 func (u *update) validate(updt *WebsocketDepthStream, recent *orderbook.Base) (bool, error) {
+	fmt.Println("validate pu:", updt.LastUpdateID, "u:", recent.LastUpdateID)
 	if updt.LastUpdateID <= recent.LastUpdateID {
 		// Drop any event where u is <= lastUpdateId in the snapshot.
 		return false, nil
@@ -1402,11 +1445,34 @@ func (u *update) validate(updt *WebsocketDepthStream, recent *orderbook.Base) (b
 		// The first processed event should have U <= lastUpdateId+1 AND
 		// u >= lastUpdateId+1.
 		if updt.FirstUpdateID > id || updt.LastUpdateID < id {
-			return false, fmt.Errorf("initial websocket orderbook sync failure for pair %s and asset %s",
-				recent.Pair,
-				asset.Spot)
+			return false, fmt.Errorf("initial websocket orderbook sync failure for pair %s and asset %s", recent.Pair, recent.Asset)
 		}
 		u.initialSync = false
+	}
+	return true, nil
+}
+
+// validate checks for correct update alignment
+func (u *update) validateUFutures(updt *WebsocketDepthStream, recent *orderbook.Base) (bool, error) {
+	// https://binance-docs.github.io/apidocs/futures/en/#how-to-manage-a-local-order-book-correctly
+	if updt.LastUpdateID < recent.LastUpdateID {
+		// Drop any event where u is < lastUpdateId in the snapshot.
+		return false, nil
+	}
+	id := recent.LastUpdateID
+	if u.initialSync {
+		// The first processed event should have U <= lastUpdateId AND u >= lastUpdateId.
+		if updt.FirstUpdateID > id || updt.LastUpdateID < id {
+			return false, fmt.Errorf("initial websocket orderbook sync failure for pair %s and asset %s",
+				recent.Pair,
+				asset.USDTMarginedFutures)
+		}
+		u.initialSync = false
+	} else if recent.LastUpdateID != updt.LastUpdateIDPrevStream {
+		// While listening to the stream, each new event's pu should be equal to the previous event's u,
+		// otherwise initialize the process from step 3.
+		// Raise an error rather than returning false, so that the OrderBook is fetched again
+		return false, errors.New("uFuturesValidate: event pu is not equal to previous event's u")
 	}
 	return true, nil
 }

@@ -1,5 +1,12 @@
 package binance
 
+import (
+	"fmt"
+
+	"github.com/thrasher-corp/gocryptotrader/currency"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
+)
+
 // import (
 // 	"context"
 // 	"encoding/json"
@@ -255,46 +262,46 @@ package binance
 
 // // stageWsUpdate stages websocket update to roll through updates that need to
 // // be applied to a fetched orderbook via REST.
-// func (o *orderbookManager) uFuturesStageWsUpdate(u *WebsocketDepthStream, pair currency.Pair, a asset.Item) error {
-// 	o.Lock()
-// 	defer o.Unlock()
-// 	m1, ok := o.state[pair.Base]
-// 	if !ok {
-// 		m1 = make(map[currency.Code]map[asset.Item]*update)
-// 		o.state[pair.Base] = m1
-// 	}
+func (o *orderbookManager) uFuturesStageWsUpdate(u *WebsocketDepthStream, pair currency.Pair, a asset.Item) error {
+	o.Lock()
+	defer o.Unlock()
+	m1, ok := o.state[pair.Base]
+	if !ok {
+		m1 = make(map[currency.Code]map[asset.Item]*update)
+		o.state[pair.Base] = m1
+	}
 
-// 	m2, ok := m1[pair.Quote]
-// 	if !ok {
-// 		m2 = make(map[asset.Item]*update)
-// 		m1[pair.Quote] = m2
-// 	}
+	m2, ok := m1[pair.Quote]
+	if !ok {
+		m2 = make(map[asset.Item]*update)
+		m1[pair.Quote] = m2
+	}
 
-// 	state, ok := m2[a]
-// 	if !ok {
-// 		state = &update{
-// 			// 100ms update assuming we might have up to a 10 second delay.
-// 			// There could be a potential 100 updates for the currency.
-// 			buffer:            make(chan *WebsocketDepthStream, maxWSUpdateBuffer),
-// 			fetchingBook:      false,
-// 			initialSync:       true,
-// 			needsFetchingBook: true,
-// 		}
-// 		m2[a] = state
-// 	}
-// 	state.lastUpdateID = u.LastUpdateID
+	state, ok := m2[a]
+	if !ok {
+		state = &update{
+			// 100ms update assuming we might have up to a 10 second delay.
+			// There could be a potential 100 updates for the currency.
+			buffer:            make(chan *WebsocketDepthStream, maxWSUpdateBuffer),
+			fetchingBook:      false,
+			initialSync:       true,
+			needsFetchingBook: true,
+		}
+		m2[a] = state
+	}
+	state.lastUpdateID = u.LastUpdateID
 
-// 	select {
-// 	// Put update in the channel buffer to be processed
-// 	case state.buffer <- u:
-// 		return nil
-// 	default:
-// 		<-state.buffer    // pop one element
-// 		state.buffer <- u // to shift buffer on fail
-// 		return fmt.Errorf("channel blockage for %s, asset %s and connection",
-// 			pair, a)
-// 	}
-// }
+	select {
+	// Put update in the channel buffer to be processed
+	case state.buffer <- u:
+		return nil
+	default:
+		<-state.buffer    // pop one element
+		state.buffer <- u // to shift buffer on fail
+		return fmt.Errorf("channel blockage for %s, asset %s and connection",
+			pair, a)
+	}
+}
 
 // // GenerateSubscriptions generates the default subscription set
 // func (b *Binance) UFuturesGenerateSubscriptions() ([]stream.ChannelSubscription, error) {

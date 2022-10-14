@@ -110,7 +110,7 @@ func (b *Binance) UFuturesOrderbook(ctx context.Context, symbol currency.Pair, l
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Println("Fetched orderbook LastUpdateID:", data.LastUpdateID)
 	resp := OrderBook{
 		Symbol:       symbolValue,
 		LastUpdateID: data.LastUpdateID,

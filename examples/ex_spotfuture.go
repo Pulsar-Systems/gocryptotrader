@@ -40,6 +40,9 @@ func main() {
 		fmt.Println("b.Setup ", err)
 	}
 	for url, bWebsocket := range b.Websockets {
+		// if url == ex.WebsocketSpot {
+		// 	continue
+		// }
 		err = bWebsocket.Connect()
 		if err != nil {
 			fmt.Println("b.Websocket.Connect ", err)
@@ -77,10 +80,18 @@ func main() {
 						fmt.Printf("orb1.LastUpdateID: %v\n", orb.LastUpdateID)
 						fmt.Printf("orb2.LastUpdateID: %v\n", orb2.LastUpdateID)
 						fmt.Println("Diff:", orb.LastUpdateID-orb2.LastUpdateID)
-						fmt.Printf("orb1.Bids: %v\n", orb.Bids[:5])
-						fmt.Printf("orb2.Bids: %v\n", orb2.Bids[:5])
+						fmt.Printf("orb1.Bids: ")
+						for _, b := range orb.Bids[:5] {
+							fmt.Printf("{%v %v}, ", b.Price, b.Amount)
+						}
+						fmt.Println()
+						fmt.Printf("orb2.Bids: ")
+						for _, b := range orb2.Bids[:5] {
+							fmt.Printf("{%v %v}, ", b.Price, b.Quantity)
+						}
+						fmt.Println()
 					}
-					time.Sleep(time.Second * 2)
+					time.Sleep(time.Second * 1)
 				}
 			}
 		}(url, bWebsocket)

@@ -372,6 +372,7 @@ func (w *Orderbook) LoadSnapshot(book *orderbook.Base) error {
 func (w *Orderbook) GetOrderbook(p currency.Pair, a asset.Item) (*orderbook.Base, error) {
 	w.m.Lock()
 	defer w.m.Unlock()
+	// fmt.Println("Getting orderbook asset:", a)
 	book, ok := w.ob[p.Base][p.Quote][a]
 	if !ok {
 		return nil, fmt.Errorf("%s %s %s %w", w.exchangeName, p, a, errDepthNotFound)
