@@ -54,7 +54,6 @@ func setupBybitAndPrintOrderBook(a asset.Item) {
 		Base:      currency.BTC,
 		Quote:     currency.USDT,
 	}
-	_ = p
 	// Wait for the Orderbook to be fetched
 	ticker := time.NewTicker(time.Second * 1)
 	for {
@@ -77,7 +76,8 @@ func setupBybitAndPrintOrderBook(a asset.Item) {
 			if err != nil {
 				fmt.Printf("FetchTicker: %v\n", err)
 			}
-			_ = t
+			// Update ticker then print it
+			by.UpdateTicker(context.TODO(), p, a)
 			fmt.Printf("t: %v\n", t)
 			// Check if the orderbook is written to an unexpected asset type
 			if a == asset.USDTMarginedFutures {
@@ -95,11 +95,10 @@ func setupBybitAndPrintOrderBook(a asset.Item) {
 
 			// If the update differences are too much to compare
 			if orb != nil {
-				_ = orbApi
-				// fmt.Println("Asset:", a)
-				// fmt.Printf("Top 5 Asks:\n\tWS:%v,\n\tREST:%v\n", orb.Asks[:5], orbApi.Asks[:5])
-				// fmt.Printf("Top 5 Bids:\n\tWS:%v,\n\tREST:%v\n", orb.Bids[:5], orbApi.Bids[:5])
-				// fmt.Println()
+				fmt.Println("Asset:", a)
+				fmt.Printf("Top 5 Asks:\n\tWS:%v,\n\tREST:%v\n", orb.Asks[:5], orbApi.Asks[:5])
+				fmt.Printf("Top 5 Bids:\n\tWS:%v,\n\tREST:%v\n", orb.Bids[:5], orbApi.Bids[:5])
+				fmt.Println()
 			}
 		}
 	}
@@ -112,7 +111,7 @@ func bybitMain() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
-	// go setupBybitAndPrintOrderBook(asset.Spot)
+	go setupBybitAndPrintOrderBook(asset.Spot)
 	go setupBybitAndPrintOrderBook(asset.USDTMarginedFutures)
 	for {
 		select {
