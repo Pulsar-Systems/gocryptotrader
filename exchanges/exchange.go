@@ -1052,11 +1052,10 @@ func (b *Base) SetGlobalPairsManager(request, config *currency.PairFormat, asset
 
 // GetWebsocket returns a pointer to the exchange websocket
 func (b *Base) GetWebsocket() (*stream.Websocket, error) {
-	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
-	if !ok || bWebsocket == nil {
+	if b.Websocket == nil {
 		return nil, common.ErrFunctionNotSupported
 	}
-	return bWebsocket, nil
+	return b.Websocket, nil
 }
 
 // SupportsWebsocket returns whether or not the exchange supports
@@ -1068,50 +1067,45 @@ func (b *Base) SupportsWebsocket() bool {
 // IsWebsocketEnabled returns whether or not the exchange has its
 // websocket client enabled
 func (b *Base) IsWebsocketEnabled() bool {
-	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
-	if !ok || bWebsocket == nil {
+	if b.Websocket == nil {
 		return false
 	}
-	return bWebsocket.IsEnabled()
+	return b.Websocket.IsEnabled()
 }
 
 // FlushWebsocketChannels refreshes websocket channel subscriptions based on
 // websocket features. Used in the event of a pair/asset or subscription change.
 func (b *Base) FlushWebsocketChannels() error {
-	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
-	if !ok || bWebsocket == nil {
+	if b.Websocket == nil {
 		return nil
 	}
-	return bWebsocket.FlushChannels()
+	return b.Websocket.FlushChannels()
 }
 
 // SubscribeToWebsocketChannels appends to ChannelsToSubscribe
 // which lets websocket.manageSubscriptions handle subscribing
 func (b *Base) SubscribeToWebsocketChannels(channels []stream.ChannelSubscription) error {
-	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
-	if !ok || bWebsocket == nil {
+	if b.Websocket == nil {
 		return common.ErrFunctionNotSupported
 	}
-	return bWebsocket.SubscribeToChannels(channels)
+	return b.Websocket.SubscribeToChannels(channels)
 }
 
 // UnsubscribeToWebsocketChannels removes from ChannelsToSubscribe
 // which lets websocket.manageSubscriptions handle unsubscribing
 func (b *Base) UnsubscribeToWebsocketChannels(channels []stream.ChannelSubscription) error {
-	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
-	if !ok || bWebsocket == nil {
+	if b.Websocket == nil {
 		return common.ErrFunctionNotSupported
 	}
-	return bWebsocket.UnsubscribeChannels(channels)
+	return b.Websocket.UnsubscribeChannels(channels)
 }
 
 // GetSubscriptions returns a copied list of subscriptions
 func (b *Base) GetSubscriptions() ([]stream.ChannelSubscription, error) {
-	bWebsocket, ok := b.Websockets[WebsocketSpot] // todo
-	if !ok || bWebsocket == nil {
+	if b.Websocket == nil {
 		return nil, common.ErrFunctionNotSupported
 	}
-	return bWebsocket.GetSubscriptions(), nil
+	return b.Websocket.GetSubscriptions(), nil
 }
 
 // AuthenticateWebsocket sends an authentication message to the websocket

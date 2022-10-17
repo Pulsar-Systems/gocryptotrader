@@ -47,8 +47,10 @@ func (b *Binance) WsConnectFactory(url exchange.URL) func() error {
 		if !b.IsEnabled() {
 			return errors.New(stream.WebsocketNotEnabled)
 		}
-		bWebsocket, ok := b.Websockets[url]
-		_ = ok //todo: check error
+		bWebsocket, exist := b.Websockets[url]
+		if !exist {
+			return fmt.Errorf("url of type: %v does not have Websocket", url)
+		}
 		if !bWebsocket.IsEnabled() {
 			return errors.New(stream.WebsocketNotEnabled)
 		}
@@ -58,13 +60,10 @@ func (b *Binance) WsConnectFactory(url exchange.URL) func() error {
 		dialer.Proxy = http.ProxyFromEnvironment
 		var err error
 		if bWebsocket.CanUseAuthenticatedEndpoints() {
-			listenKey, err = b.GetWsAuthStreamKey(context.TODO()) // todo: is using restspot for auth
+			listenKey, err = b.GetWsAuthStreamKey(context.TODO())
 			if err != nil {
 				bWebsocket.SetCanUseAuthenticatedEndpoints(false)
-				log.Errorf(log.ExchangeSys,
-					"%v unable to connect to authenticated Websocket. Error: %s",
-					b.Name,
-					err)
+				log.Errorf(log.ExchangeSys, "%v unable to connect to authenticated Websocket. Error: %s", b.Name, err)
 			} else {
 				// cleans on failed connection
 				clean := strings.Split(bWebsocket.GetWebsocketURL(), "?streams=")

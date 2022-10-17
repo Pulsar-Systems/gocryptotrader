@@ -24,7 +24,7 @@ type Binance struct {
 	// Valid string list that is required by the exchange
 	validLimits []int
 	obm         map[exchange.URL]*orderbookManager
-	// Websockets  map[exchange.URL]*(stream.Websocket)
+	Websockets  map[exchange.URL]*(stream.Websocket)
 }
 
 func (b *Binance) GetWebsocket() (*stream.Websocket, error) {
