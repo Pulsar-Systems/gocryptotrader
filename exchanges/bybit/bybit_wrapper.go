@@ -235,60 +235,6 @@ func (by *Bybit) Setup(exch *config.Exchange) error {
 	})
 }
 
-func (by *Bybit) SetupFuture(exch *config.Exchange) error {
-	if !exch.Enabled {
-		by.SetEnabled(false)
-		return nil
-	}
-
-	err := by.SetupDefaults(exch)
-	if err != nil {
-		return err
-	}
-
-	// wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
-	if err != nil {
-		return err
-	}
-
-	err = by.Websocket.Setup(
-		&stream.WebsocketSetup{
-			ExchangeConfig:        exch,
-			DefaultURL:            "wss://stream.bybit.com/realtime_public",
-			RunningURL:            "wss://stream.bybit.com/realtime_public",
-			RunningURLAuth:        "wss://stream.bybit.com/realtime_private",
-			Connector:             by.WsUSDTConnect,
-			Subscriber:            by.SubscribeUSDT,
-			Unsubscriber:          by.UnsubscribeUSDT,
-			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.USDTMarginedFutures),
-			Features:              &by.Features.Supports.WebsocketCapabilities,
-			OrderbookBufferConfig: buffer.Config{
-				SortBuffer:            true,
-				SortBufferByUpdateIDs: true,
-			},
-			TradeFeed: by.Features.Enabled.TradeFeed,
-		})
-	if err != nil {
-		return err
-	}
-
-	err = by.Websocket.SetupNewConnection(stream.ConnectionSetup{
-		URL:                  by.Websocket.GetWebsocketURL(),
-		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-	})
-	if err != nil {
-		return err
-	}
-
-	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
-		URL:                  bybitWSBaseURL + wsSpotPrivate,
-		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-		Authenticated:        true,
-	})
-}
-
 // AuthenticateWebsocket sends an authentication message to the websocket
 func (by *Bybit) AuthenticateWebsocket(ctx context.Context) error {
 	return by.WsAuth(ctx)
@@ -511,6 +457,15 @@ func (by *Bybit) UpdateTickers(ctx context.Context, assetType asset.Item) error 
 				if err != nil {
 					return err
 				}
+				var openValue float64
+				if tick[y].OpenValue == "" {
+					openValue = 0 // TODO: return?
+				} else {
+					openValue, err = strconv.ParseFloat(tick[y].OpenValue, 64)
+					if err != nil {
+						return err
+					}
+				}
 				err = ticker.ProcessTicker(&ticker.Price{
 					Last:         tick[y].LastPrice,
 					High:         tick[y].HighPrice24h,
@@ -518,7 +473,7 @@ func (by *Bybit) UpdateTickers(ctx context.Context, assetType asset.Item) error 
 					Bid:          tick[y].BidPrice,
 					Ask:          tick[y].AskPrice,
 					Volume:       tick[y].Volume24h,
-					Open:         tick[y].OpenValue,
+					Open:         openValue,
 					Pair:         cp,
 					ExchangeName: by.Name,
 					AssetType:    assetType})
@@ -614,6 +569,15 @@ func (by *Bybit) UpdateTicker(ctx context.Context, p currency.Pair, assetType as
 			if err != nil {
 				return nil, err
 			}
+			var openValue float64
+			if tick[y].OpenValue == "" {
+				openValue = 0 // TODO: return?
+			} else {
+				openValue, err = strconv.ParseFloat(tick[y].OpenValue, 64)
+				if err != nil {
+					return nil, err
+				}
+			}
 			err = ticker.ProcessTicker(&ticker.Price{
 				Last:         tick[y].LastPrice,
 				High:         tick[y].HighPrice24h,
@@ -621,7 +585,7 @@ func (by *Bybit) UpdateTicker(ctx context.Context, p currency.Pair, assetType as
 				Bid:          tick[y].BidPrice,
 				Ask:          tick[y].AskPrice,
 				Volume:       tick[y].Volume24h,
-				Open:         tick[y].OpenValue,
+				Open:         openValue,
 				Pair:         cp,
 				ExchangeName: by.Name,
 				AssetType:    assetType})

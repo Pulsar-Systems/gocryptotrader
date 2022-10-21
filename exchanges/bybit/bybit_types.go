@@ -582,7 +582,7 @@ type WsCoinDeltaOrderbook struct {
 // WsFuturesTradeData stores ws future trade data
 type WsFuturesTradeData struct {
 	Time               time.Time         `json:"timestamp"`
-	TimeInMilliseconds bybitTimeMilliSec `json:"trade_time_ms,string"`
+	TimeInMilliseconds bybitTimeMilliSec `json:"trade_time_ms"`
 	Symbol             string            `json:"symbol"`
 	Side               string            `json:"side"`
 	Size               float64           `json:"size"`

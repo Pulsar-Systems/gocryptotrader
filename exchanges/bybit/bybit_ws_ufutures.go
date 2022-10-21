@@ -12,16 +12,78 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/thrasher-corp/gocryptotrader/common"
 	"github.com/thrasher-corp/gocryptotrader/common/crypto"
+	"github.com/thrasher-corp/gocryptotrader/config"
 	"github.com/thrasher-corp/gocryptotrader/currency"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream/buffer"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/ticker"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/trade"
 	"github.com/thrasher-corp/gocryptotrader/log"
 )
 
-const wsUSDTKline = "candle"
+const (
+	wsUSDTKline         = "candle"
+	wsTickerUFutures    = "instrument_info.100ms"
+	wsTradesUFutures    = "trade" // Same as spot
+	wsOrderbookUFutures = "orderBook_200.100ms"
+	wsKlinesUFutures    = "candle.1"
+)
+
+func (by *Bybit) SetupFuture(exch *config.Exchange) error {
+	if !exch.Enabled {
+		by.SetEnabled(false)
+		return nil
+	}
+
+	err := by.SetupDefaults(exch)
+	if err != nil {
+		return err
+	}
+
+	// wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
+	if err != nil {
+		return err
+	}
+
+	err = by.Websocket.Setup(
+		&stream.WebsocketSetup{
+			ExchangeConfig:        exch,
+			DefaultURL:            "wss://stream.bybit.com/realtime_public",
+			RunningURL:            "wss://stream.bybit.com/realtime_public",
+			RunningURLAuth:        "wss://stream.bybit.com/realtime_private",
+			Connector:             by.WsUSDTConnect,
+			Subscriber:            by.SubscribeUSDT,
+			Unsubscriber:          by.UnsubscribeUSDT,
+			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.USDTMarginedFutures),
+			Features:              &by.Features.Supports.WebsocketCapabilities,
+			OrderbookBufferConfig: buffer.Config{
+				SortBuffer:            true,
+				SortBufferByUpdateIDs: true,
+			},
+			TradeFeed: by.Features.Enabled.TradeFeed,
+		})
+	if err != nil {
+		return err
+	}
+
+	err = by.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  by.Websocket.GetWebsocketURL(),
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+	})
+	if err != nil {
+		return err
+	}
+
+	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  bybitWSBaseURL + wsSpotPrivate,
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		Authenticated:        true,
+	})
+}
 
 // WsUSDTConnect connects to a USDT websocket feed
 func (by *Bybit) WsUSDTConnect() error {
@@ -105,6 +167,29 @@ func (by *Bybit) SubscribeUSDT(channelsToSubscribe []stream.ChannelSubscription)
 	return nil
 }
 
+func (by *Bybit) GenerateDefaultSubscriptionsUFutures() ([]stream.ChannelSubscription, error) {
+	var subscriptions []stream.ChannelSubscription
+	var channels = []string{wsTickerUFutures, wsTradesUFutures, wsOrderbookUFutures, wsKlinesUFutures}
+	pairs, err := by.GetEnabledPairs(asset.USDTMarginedFutures)
+	if err != nil {
+		return nil, err
+	}
+	for z := range pairs {
+		for x := range channels {
+			subscriptions = append(subscriptions,
+				stream.ChannelSubscription{
+					Channel:  channels[x],
+					Currency: pairs[z],
+					Asset:    asset.USDTMarginedFutures,
+					Params: map[string]interface{}{
+						"pair": strings.Replace(pairs[z].String(), "-", "", -1),
+					},
+				})
+		}
+	}
+	return subscriptions, nil
+}
+
 // UnsubscribeUSDT sends a websocket message to stop receiving data from the channel
 func (by *Bybit) UnsubscribeUSDT(channelsToUnsubscribe []stream.ChannelSubscription) error {
 	var errs common.Errors
@@ -161,7 +246,6 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 	if err != nil {
 		return err
 	}
-	// Handle the initial websocket subscribe sucess data, previously was not in the library
 	s, ok := multiStreamData["success"].(bool)
 	if ok {
 		if !s {

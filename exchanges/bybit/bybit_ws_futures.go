@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -180,7 +179,6 @@ func (by *Bybit) wsFuturesHandleData(respRaw []byte) error {
 				var response WsFuturesOrderbook
 				err = json.Unmarshal(respRaw, &response)
 				if err != nil {
-					fmt.Printf("err: %v\n", err)
 					return err
 				}
 
@@ -189,6 +187,7 @@ func (by *Bybit) wsFuturesHandleData(respRaw []byte) error {
 				if err != nil {
 					return err
 				}
+
 				err = by.processOrderbook(response.OBData,
 					response.Type,
 					p,
@@ -203,6 +202,7 @@ func (by *Bybit) wsFuturesHandleData(respRaw []byte) error {
 				if err != nil {
 					return err
 				}
+
 				if len(response.OBData.Delete) > 0 {
 					var p currency.Pair
 					p, err = by.extractCurrencyPair(response.OBData.Delete[0].Symbol, asset.Futures)
