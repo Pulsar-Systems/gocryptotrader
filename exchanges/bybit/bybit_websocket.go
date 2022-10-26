@@ -27,6 +27,8 @@ const (
 	bybitWSBaseURL      = "wss://stream.bybit.com/"
 	wsSpotPublicTopicV2 = "spot/quote/ws/v2"
 	wsSpotPrivate       = "spot/ws"
+	// wsSpotPublicTopicV3 = "spot/public/v3"
+	// wsSpotPrivateV3     = "spot/private/v3"
 	bybitWebsocketTimer = 20 * time.Second
 	wsOrderbook         = "depth"
 	wsTicker            = "bookTicker"
@@ -116,6 +118,7 @@ func (by *Bybit) WsAuth(ctx context.Context) error {
 // Subscribe sends a websocket message to receive data from the channel
 func (by *Bybit) Subscribe(channelsToSubscribe []stream.ChannelSubscription) error {
 	var errs common.Errors
+	fmt.Println("subscribe:", channelsToSubscribe)
 	for i := range channelsToSubscribe {
 		var subReq WsReq
 		subReq.Topic = channelsToSubscribe[i].Channel
@@ -260,6 +263,7 @@ func (by *Bybit) WsDataHandler() {
 }
 
 func (by *Bybit) wsHandleData(respRaw []byte) error {
+	// fmt.Println("new handle data:", string(respRaw))
 	var result interface{}
 	err := json.Unmarshal(respRaw, &result)
 	if err != nil {
@@ -279,6 +283,7 @@ func (by *Bybit) wsHandleData(respRaw []byte) error {
 		if t, ok := d["topic"].(string); ok {
 			switch t {
 			case wsOrderbook:
+				// fmt.Println("wsorderbook update")
 				var data WsOrderbook
 				err := json.Unmarshal(respRaw, &data)
 				if err != nil {

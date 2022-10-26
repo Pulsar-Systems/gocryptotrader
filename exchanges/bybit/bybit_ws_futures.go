@@ -188,7 +188,7 @@ func (by *Bybit) wsFuturesHandleData(respRaw []byte) error {
 					return err
 				}
 
-				err = by.processOrderbook(response.OBData,
+				err = by.processOrderbookCFutures(response.OBData,
 					response.Type,
 					p,
 					asset.Futures)
@@ -209,7 +209,7 @@ func (by *Bybit) wsFuturesHandleData(respRaw []byte) error {
 					if err != nil {
 						return err
 					}
-					err = by.processOrderbook(response.OBData.Delete,
+					err = by.processOrderbookCFutures(response.OBData.Delete,
 						wsOrderbookActionDelete,
 						p,
 						asset.Futures)
@@ -225,7 +225,7 @@ func (by *Bybit) wsFuturesHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Update,
+					err = by.processOrderbookCFutures(response.OBData.Update,
 						wsOrderbookActionUpdate,
 						p,
 						asset.Futures)
@@ -241,7 +241,7 @@ func (by *Bybit) wsFuturesHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Insert,
+					err = by.processOrderbookCFutures(response.OBData.Insert,
 						wsOrderbookActionInsert,
 						p,
 						asset.Futures)

@@ -19,11 +19,14 @@ import (
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/orderbook"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
 )
 
 // Bybit is the overarching type across this package
 type Bybit struct {
 	exchange.Base
+
+	WebsocketUFuture *stream.Websocket
 }
 
 const (
