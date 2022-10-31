@@ -233,7 +233,7 @@ func (by *Bybit) wsCoinHandleData(respRaw []byte) error {
 					return err
 				}
 
-				err = by.processOrderbook(response.OBData,
+				err = by.processOrderbookCFutures(response.OBData,
 					response.Type,
 					p,
 					asset.CoinMarginedFutures)
@@ -255,7 +255,7 @@ func (by *Bybit) wsCoinHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Delete,
+					err = by.processOrderbookCFutures(response.OBData.Delete,
 						wsOrderbookActionDelete,
 						p,
 						asset.CoinMarginedFutures)
@@ -271,7 +271,7 @@ func (by *Bybit) wsCoinHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Update,
+					err = by.processOrderbookCFutures(response.OBData.Update,
 						wsOrderbookActionUpdate,
 						p,
 						asset.CoinMarginedFutures)
@@ -287,7 +287,7 @@ func (by *Bybit) wsCoinHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Insert,
+					err = by.processOrderbookCFutures(response.OBData.Insert,
 						wsOrderbookActionInsert,
 						p,
 						asset.CoinMarginedFutures)
@@ -703,7 +703,7 @@ func (by *Bybit) wsCoinHandleData(respRaw []byte) error {
 }
 
 // processOrderbook processes orderbook updates
-func (by *Bybit) processOrderbook(data []WsFuturesOrderbookData, action string, p currency.Pair, a asset.Item) error {
+func (by *Bybit) processOrderbookCFutures(data []WsFuturesOrderbookData, action string, p currency.Pair, a asset.Item) error {
 	if len(data) < 1 {
 		return errors.New("no orderbook data")
 	}
@@ -727,6 +727,9 @@ func (by *Bybit) processOrderbook(data []WsFuturesOrderbookData, action string, 
 					data[i].Side)
 			}
 		}
+		// For some reason Bybit sends the orderbook in a single list imitating a spread
+		// Therefore the orderbook bids must be reversed
+		book.Bids.Reverse()
 		book.Asset = a
 		book.Pair = p
 		book.Exchange = by.Name

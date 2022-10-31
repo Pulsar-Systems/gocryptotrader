@@ -61,17 +61,17 @@ type SymbolPriceTicker struct {
 	HighPrice24h           float64 `json:"high_price_24h,string"`
 	LowPrice24h            float64 `json:"low_price_24h,string"`
 	Price1hAgo             float64 `json:"prev_price_1h,string"`
-	PricePcntChange1h      float64 `json:"price_1h_pcnt,string"`
+	PricePcntChange1h      string  `json:"price_1h_pcnt"` // type is string because it comes as empty string in API response sometime
 	MarkPrice              float64 `json:"mark_price,string"`
 	IndexPrice             float64 `json:"index_price,string"`
 	OpenInterest           float64 `json:"open_interest"`
-	OpenValue              float64 `json:"open_value,string"`
-	TotalTurnover          float64 `json:"total_turnover,string"`
+	OpenValue              string  `json:"open_value"`     // type is string because it comes as empty string in API response sometime
+	TotalTurnover          string  `json:"total_turnover"` // type is string because it comes as empty string in API response sometime
 	Turnover24h            float64 `json:"turnover_24h,string"`
 	TotalVolume            float64 `json:"total_volume"`
 	Volume24h              float64 `json:"volume_24h"`
 	FundingRate            float64 `json:"funding_rate,string"`
-	PredictedFundingRate   float64 `json:"predicted_funding_rate,string"`
+	PredictedFundingRate   string  `json:"predicted_funding_rate"` // type is string because it comes as empty string in API response sometime
 	NextFundingTime        string  `json:"next_funding_time"`
 	CountdownHour          int64   `json:"countdown_hour"`
 	DeliveryFeeRate        string  `json:"delivery_fee_rate"`        // type is string because it comes as empty string in API response sometime

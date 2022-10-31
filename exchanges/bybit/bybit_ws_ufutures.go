@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,24 +13,89 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/thrasher-corp/gocryptotrader/common"
 	"github.com/thrasher-corp/gocryptotrader/common/crypto"
+	"github.com/thrasher-corp/gocryptotrader/config"
 	"github.com/thrasher-corp/gocryptotrader/currency"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/orderbook"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream/buffer"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/ticker"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/trade"
 	"github.com/thrasher-corp/gocryptotrader/log"
 )
 
-const wsUSDTKline = "candle"
+const (
+	wsUSDTKline         = "candle"
+	wsTickerUFutures    = "instrument_info.100ms"
+	wsTradesUFutures    = "trade" // Same as spot
+	wsOrderbookUFutures = "orderBook_200.100ms"
+	wsKlinesUFutures    = "candle.1"
+)
+
+func (by *Bybit) SetupFuture(exch *config.Exchange) error {
+	if !exch.Enabled {
+		by.SetEnabled(false)
+		return nil
+	}
+
+	if by.Config == nil {
+		err := by.SetupDefaults(exch)
+		if err != nil {
+			return err
+		}
+	}
+
+	// wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
+	// if err != nil {
+	// 	return err
+	// }
+
+	err := by.WebsocketUFuture.Setup(
+		&stream.WebsocketSetup{
+			ExchangeConfig:        exch,
+			DefaultURL:            "wss://stream.bybit.com/realtime_public",
+			RunningURL:            "wss://stream.bybit.com/realtime_public",
+			RunningURLAuth:        "wss://stream.bybit.com/realtime_private",
+			Connector:             by.WsUSDTConnect,
+			Subscriber:            by.SubscribeUSDT,
+			Unsubscriber:          by.UnsubscribeUSDT,
+			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.USDTMarginedFutures),
+			Features:              &by.Features.Supports.WebsocketCapabilities,
+			OrderbookBufferConfig: buffer.Config{
+				SortBuffer:            true,
+				SortBufferByUpdateIDs: true,
+			},
+			TradeFeed: by.Features.Enabled.TradeFeed,
+		})
+	if err != nil {
+		return err
+	}
+
+	return by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  by.WebsocketUFuture.GetWebsocketURL(),
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+	})
+	// if err != nil {
+	// 	return err
+	// }
+
+	// return by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
+	// 	URL:                  bybitWSBaseURL + wsSpotPrivate,
+	// 	ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+	// 	ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+	// 	Authenticated:        true,
+	// })
+}
 
 // WsUSDTConnect connects to a USDT websocket feed
 func (by *Bybit) WsUSDTConnect() error {
-	if !by.Websocket.IsEnabled() || !by.IsEnabled() {
+	if !by.WebsocketUFuture.IsEnabled() || !by.IsEnabled() {
 		return errors.New(stream.WebsocketNotEnabled)
 	}
 	var dialer websocket.Dialer
-	err := by.Websocket.Conn.Dial(&dialer, http.Header{})
+	err := by.WebsocketUFuture.Conn.Dial(&dialer, http.Header{})
 	if err != nil {
 		return err
 	}
@@ -38,21 +104,21 @@ func (by *Bybit) WsUSDTConnect() error {
 	if err != nil {
 		return err
 	}
-	by.Websocket.Conn.SetupPingHandler(stream.PingHandler{
+	by.WebsocketUFuture.Conn.SetupPingHandler(stream.PingHandler{
 		Message:     pingMsg,
 		MessageType: websocket.PingMessage,
 		Delay:       bybitWebsocketTimer,
 	})
 	if by.Verbose {
-		log.Debugf(log.ExchangeSys, "%s Connected to Websocket.\n", by.Name)
+		log.Debugf(log.ExchangeSys, "%s Connected to WebsocketUFuture.\n", by.Name)
 	}
 
 	go by.wsUSDTReadData()
 	if by.IsWebsocketAuthenticationSupported() {
 		err = by.WsUSDTAuth(context.TODO())
 		if err != nil {
-			by.Websocket.DataHandler <- err
-			by.Websocket.SetCanUseAuthenticatedEndpoints(false)
+			by.WebsocketUFuture.DataHandler <- err
+			by.WebsocketUFuture.SetCanUseAuthenticatedEndpoints(false)
 		}
 	}
 
@@ -81,28 +147,52 @@ func (by *Bybit) WsUSDTAuth(ctx context.Context) error {
 		Operation: "auth",
 		Args:      []interface{}{creds.Key, intNonce, sign},
 	}
-	return by.Websocket.Conn.SendJSONMessage(req)
+	return by.WebsocketUFuture.Conn.SendJSONMessage(req)
 }
 
 // SubscribeUSDT sends a websocket message to receive data from the channel
 func (by *Bybit) SubscribeUSDT(channelsToSubscribe []stream.ChannelSubscription) error {
 	var errs common.Errors
+	fmt.Println("subscribe usdt:", channelsToSubscribe)
 	for i := range channelsToSubscribe {
 		var sub WsFuturesReq
 		sub.Topic = subscribe
 
 		sub.Args = append(sub.Args, formatArgs(channelsToSubscribe[i].Channel, channelsToSubscribe[i].Params))
-		err := by.Websocket.Conn.SendJSONMessage(sub)
+		err := by.WebsocketUFuture.Conn.SendJSONMessage(sub)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		by.Websocket.AddSuccessfulSubscriptions(channelsToSubscribe[i])
+		by.WebsocketUFuture.AddSuccessfulSubscriptions(channelsToSubscribe[i])
 	}
 	if errs != nil {
 		return errs
 	}
 	return nil
+}
+
+func (by *Bybit) GenerateDefaultSubscriptionsUFutures() ([]stream.ChannelSubscription, error) {
+	var subscriptions []stream.ChannelSubscription
+	var channels = []string{wsTickerUFutures, wsTradesUFutures, wsOrderbookUFutures, wsKlinesUFutures}
+	pairs, err := by.GetEnabledPairs(asset.USDTMarginedFutures)
+	if err != nil {
+		return nil, err
+	}
+	for z := range pairs {
+		for x := range channels {
+			subscriptions = append(subscriptions,
+				stream.ChannelSubscription{
+					Channel:  channels[x],
+					Currency: pairs[z],
+					Asset:    asset.USDTMarginedFutures,
+					Params: map[string]interface{}{
+						"pair": strings.Replace(pairs[z].String(), "-", "", -1),
+					},
+				})
+		}
+	}
+	return subscriptions, nil
 }
 
 // UnsubscribeUSDT sends a websocket message to stop receiving data from the channel
@@ -119,12 +209,12 @@ func (by *Bybit) UnsubscribeUSDT(channelsToUnsubscribe []stream.ChannelSubscript
 			continue
 		}
 		unSub.Args = append(unSub.Args, channelsToUnsubscribe[i].Channel+dot+formattedPair.String())
-		err = by.Websocket.Conn.SendJSONMessage(unSub)
+		err = by.WebsocketUFuture.Conn.SendJSONMessage(unSub)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		by.Websocket.RemoveSuccessfulUnsubscriptions(channelsToUnsubscribe[i])
+		by.WebsocketUFuture.RemoveSuccessfulUnsubscriptions(channelsToUnsubscribe[i])
 	}
 	if errs != nil {
 		return errs
@@ -134,22 +224,22 @@ func (by *Bybit) UnsubscribeUSDT(channelsToUnsubscribe []stream.ChannelSubscript
 
 // wsUSDTReadData gets and passes on websocket messages for processing
 func (by *Bybit) wsUSDTReadData() {
-	by.Websocket.Wg.Add(1)
-	defer by.Websocket.Wg.Done()
+	by.WebsocketUFuture.Wg.Add(1)
+	defer by.WebsocketUFuture.Wg.Done()
 
 	for {
 		select {
-		case <-by.Websocket.ShutdownC:
+		case <-by.WebsocketUFuture.ShutdownC:
 			return
 		default:
-			resp := by.Websocket.Conn.ReadMessage()
+			resp := by.WebsocketUFuture.Conn.ReadMessage()
 			if resp.Raw == nil {
 				return
 			}
 
 			err := by.wsUSDTHandleData(resp.Raw)
 			if err != nil {
-				by.Websocket.DataHandler <- err
+				by.WebsocketUFuture.DataHandler <- err
 			}
 		}
 	}
@@ -160,6 +250,13 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 	err := json.Unmarshal(respRaw, &multiStreamData)
 	if err != nil {
 		return err
+	}
+	s, ok := multiStreamData["success"].(bool)
+	if ok {
+		if !s {
+			log.Errorf(log.ExchangeSys, "%s WebsocketUFuture connection was unsuccessfull: %v\n", by.Name, multiStreamData)
+		}
+		return nil
 	}
 
 	t, ok := multiStreamData["topic"].(string)
@@ -175,9 +272,11 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 
 	switch topics[0] {
 	case wsOrder25, wsOrder200:
+		// fmt.Println("New handle data: ", multiStreamData)
 		if wsType, ok := multiStreamData["type"].(string); ok {
 			switch wsType {
 			case wsOperationSnapshot:
+				// fmt.Println("New handle data: ", multiStreamData, "\n")
 				var response WsUSDTOrderbook
 				err = json.Unmarshal(respRaw, &response)
 				if err != nil {
@@ -190,7 +289,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 					return err
 				}
 
-				err = by.processOrderbook(response.Data.OBData,
+				err = by.processOrderbookUFutures(response.Data.OBData,
 					response.Type,
 					p,
 					asset.USDTMarginedFutures)
@@ -212,7 +311,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Delete,
+					err = by.processOrderbookUFutures(response.OBData.Delete,
 						wsOrderbookActionDelete,
 						p,
 						asset.USDTMarginedFutures)
@@ -228,7 +327,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Update,
+					err = by.processOrderbookUFutures(response.OBData.Update,
 						wsOrderbookActionUpdate,
 						p,
 						asset.USDTMarginedFutures)
@@ -244,7 +343,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 						return err
 					}
 
-					err = by.processOrderbook(response.OBData.Insert,
+					err = by.processOrderbookUFutures(response.OBData.Insert,
 						wsOrderbookActionInsert,
 						p,
 						asset.USDTMarginedFutures)
@@ -253,7 +352,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 					}
 				}
 			default:
-				by.Websocket.DataHandler <- stream.UnhandledMessageWarning{Message: by.Name + stream.UnhandledMessage + "unsupported orderbook operation"}
+				by.WebsocketUFuture.DataHandler <- stream.UnhandledMessageWarning{Message: by.Name + stream.UnhandledMessage + "unsupported orderbook operation"}
 			}
 		}
 
@@ -277,7 +376,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oSide order.Side
 			oSide, err = order.StringToOrderSide(response.TradeData[i].Side)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					Err:      err,
 				}
@@ -310,7 +409,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 		}
 
 		for i := range response.KlineData {
-			by.Websocket.DataHandler <- stream.KlineData{
+			by.WebsocketUFuture.DataHandler <- stream.KlineData{
 				Pair:       p,
 				AssetType:  asset.USDTMarginedFutures,
 				Exchange:   by.Name,
@@ -339,7 +438,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 					return err
 				}
 
-				by.Websocket.DataHandler <- &ticker.Price{
+				by.WebsocketUFuture.DataHandler <- &ticker.Price{
 					ExchangeName: by.Name,
 					Last:         response.Ticker.LastPrice,
 					High:         response.Ticker.HighPrice24h,
@@ -368,7 +467,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 							return err
 						}
 
-						by.Websocket.DataHandler <- &ticker.Price{
+						by.WebsocketUFuture.DataHandler <- &ticker.Price{
 							ExchangeName: by.Name,
 							Last:         response.Data.Delete[x].LastPrice,
 							High:         response.Data.Delete[x].HighPrice24h,
@@ -392,7 +491,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 							return err
 						}
 
-						by.Websocket.DataHandler <- &ticker.Price{
+						by.WebsocketUFuture.DataHandler <- &ticker.Price{
 							ExchangeName: by.Name,
 							Last:         response.Data.Update[x].LastPrice,
 							High:         response.Data.Update[x].HighPrice24h,
@@ -416,7 +515,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 							return err
 						}
 
-						by.Websocket.DataHandler <- &ticker.Price{
+						by.WebsocketUFuture.DataHandler <- &ticker.Price{
 							ExchangeName: by.Name,
 							Last:         response.Data.Insert[x].LastPrice,
 							High:         response.Data.Insert[x].HighPrice24h,
@@ -433,7 +532,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 				}
 
 			default:
-				by.Websocket.DataHandler <- stream.UnhandledMessageWarning{Message: by.Name + stream.UnhandledMessage + "unsupported ticker operation"}
+				by.WebsocketUFuture.DataHandler <- stream.UnhandledMessageWarning{Message: by.Name + stream.UnhandledMessage + "unsupported ticker operation"}
 			}
 		}
 
@@ -443,7 +542,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 		if err != nil {
 			return err
 		}
-		by.Websocket.DataHandler <- response.Data
+		by.WebsocketUFuture.DataHandler <- response.Data
 
 	case wsPosition:
 		var response WsFuturesPosition
@@ -451,7 +550,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 		if err != nil {
 			return err
 		}
-		by.Websocket.DataHandler <- response.Data
+		by.WebsocketUFuture.DataHandler <- response.Data
 
 	case wsExecution:
 		var response WsFuturesExecution
@@ -470,7 +569,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oSide order.Side
 			oSide, err = order.StringToOrderSide(response.Data[i].Side)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[i].OrderID,
 					Err:      err,
@@ -480,14 +579,14 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oStatus order.Status
 			oStatus, err = order.StringToOrderStatus(response.Data[i].ExecutionType)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[i].OrderID,
 					Err:      err,
 				}
 			}
 
-			by.Websocket.DataHandler <- &order.Detail{
+			by.WebsocketUFuture.DataHandler <- &order.Detail{
 				Exchange:  by.Name,
 				OrderID:   response.Data[i].OrderID,
 				AssetType: asset.USDTMarginedFutures,
@@ -523,7 +622,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oSide order.Side
 			oSide, err = order.StringToOrderSide(response.Data[x].Side)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[x].OrderID,
 					Err:      err,
@@ -532,7 +631,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oType order.Type
 			oType, err = order.StringToOrderType(response.Data[x].OrderType)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[x].OrderID,
 					Err:      err,
@@ -541,13 +640,13 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oStatus order.Status
 			oStatus, err = order.StringToOrderStatus(response.Data[x].OrderStatus)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[x].OrderID,
 					Err:      err,
 				}
 			}
-			by.Websocket.DataHandler <- &order.Detail{
+			by.WebsocketUFuture.DataHandler <- &order.Detail{
 				Price:     response.Data[x].Price,
 				Amount:    response.Data[x].OrderQty,
 				Exchange:  by.Name,
@@ -585,7 +684,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oSide order.Side
 			oSide, err = order.StringToOrderSide(response.Data[x].Side)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[x].OrderID,
 					Err:      err,
@@ -594,7 +693,7 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oType order.Type
 			oType, err = order.StringToOrderType(response.Data[x].OrderType)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[x].OrderID,
 					Err:      err,
@@ -603,13 +702,13 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 			var oStatus order.Status
 			oStatus, err = order.StringToOrderStatus(response.Data[x].OrderStatus)
 			if err != nil {
-				by.Websocket.DataHandler <- order.ClassificationError{
+				by.WebsocketUFuture.DataHandler <- order.ClassificationError{
 					Exchange: by.Name,
 					OrderID:  response.Data[x].OrderID,
 					Err:      err,
 				}
 			}
-			by.Websocket.DataHandler <- &order.Detail{
+			by.WebsocketUFuture.DataHandler <- &order.Detail{
 				Price:     response.Data[x].Price,
 				Amount:    response.Data[x].OrderQty,
 				Exchange:  by.Name,
@@ -639,11 +738,87 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 		if err != nil {
 			return err
 		}
-		by.Websocket.DataHandler <- response.Data
+		by.WebsocketUFuture.DataHandler <- response.Data
 
 	default:
-		by.Websocket.DataHandler <- stream.UnhandledMessageWarning{Message: by.Name + stream.UnhandledMessage + string(respRaw)}
+		by.WebsocketUFuture.DataHandler <- stream.UnhandledMessageWarning{Message: by.Name + stream.UnhandledMessage + string(respRaw)}
 	}
 
+	return nil
+}
+
+// processOrderbook processes orderbook updates
+func (by *Bybit) processOrderbookUFutures(data []WsFuturesOrderbookData, action string, p currency.Pair, a asset.Item) error {
+	if len(data) < 1 {
+		return errors.New("no orderbook data")
+	}
+
+	switch action {
+	case wsOperationSnapshot:
+		var book orderbook.Base
+		for i := range data {
+			item := orderbook.Item{
+				Price:  data[i].Price,
+				Amount: data[i].Size,
+				ID:     data[i].ID,
+			}
+			switch {
+			case strings.EqualFold(data[i].Side, sideSell):
+				book.Asks = append(book.Asks, item)
+			case strings.EqualFold(data[i].Side, sideBuy):
+				book.Bids = append(book.Bids, item)
+			default:
+				return fmt.Errorf("could not process websocket orderbook update, order side could not be matched for %s",
+					data[i].Side)
+			}
+		}
+		// For some reason Bybit sends the orderbook in a single list imitating a spread
+		// Therefore the orderbook bids must be reversed
+		book.Bids.Reverse()
+		book.Asset = a
+		book.Pair = p
+		book.Exchange = by.Name
+		book.VerifyOrderbook = by.CanVerifyOrderbook
+
+		err := by.WebsocketUFuture.Orderbook.LoadSnapshot(&book)
+		if err != nil {
+			return fmt.Errorf("process orderbook error -  %s", err)
+		}
+	default:
+		updateAction, err := by.GetActionFromString(action)
+		if err != nil {
+			return err
+		}
+
+		var asks, bids []orderbook.Item
+		for i := range data {
+			item := orderbook.Item{
+				Price:  data[i].Price,
+				Amount: data[i].Size,
+				ID:     data[i].ID,
+			}
+
+			switch {
+			case strings.EqualFold(data[i].Side, sideSell):
+				asks = append(asks, item)
+			case strings.EqualFold(data[i].Side, sideBuy):
+				bids = append(bids, item)
+			default:
+				return fmt.Errorf("could not process websocket orderbook update, order side could not be matched for %s",
+					data[i].Side)
+			}
+		}
+
+		err = by.WebsocketUFuture.Orderbook.Update(&orderbook.Update{
+			Bids:   bids,
+			Asks:   asks,
+			Pair:   p,
+			Asset:  a,
+			Action: updateAction,
+		})
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
