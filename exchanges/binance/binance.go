@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/thrasher-corp/gocryptotrader/common"
@@ -19,6 +20,7 @@ import (
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
 	"github.com/thrasher-corp/gocryptotrader/log"
 )
 
@@ -27,7 +29,11 @@ type Binance struct {
 	exchange.Base
 	// Valid string list that is required by the exchange
 	validLimits []int
-	obm         *orderbookManager
+
+	obms       map[exchange.URL]*orderbookManager
+	obmsMutex  sync.RWMutex
+	Websockets map[exchange.URL]*(stream.Websocket)
+	wsMutex    sync.RWMutex
 }
 
 const (
@@ -78,6 +84,17 @@ const (
 	binanceSAPITimeLayout = "2006-01-02 15:04:05"
 )
 
+// GetWebsocketFromURL gets websocket manager for a specific URL
+func (b *Binance) GetWebsocketFromURL(u exchange.URL) (*stream.Websocket, error) {
+	b.wsMutex.RLock()
+	bWebsocket, ok := b.Websockets[u] // todo
+	b.wsMutex.RUnlock()
+	if !ok || bWebsocket == nil {
+		return nil, common.ErrFunctionNotSupported
+	}
+	return bWebsocket, nil
+}
+
 // GetInterestHistory gets interest history for currency/currencies provided
 func (b *Binance) GetInterestHistory(ctx context.Context) (MarginInfoData, error) {
 	var resp MarginInfoData
@@ -107,7 +124,7 @@ func (b *Binance) GetExchangeInfo(ctx context.Context) (ExchangeInfo, error) {
 		exchange.RestSpotSupplementary, exchangeInfo, spotExchangeInfo, &resp)
 }
 
-// GetOrderBook returns full orderbook information
+// GetOrderBook returns full Spot orderbook information
 //
 // OrderBookDataRequestParams contains the following members
 // symbol: string of currency pair

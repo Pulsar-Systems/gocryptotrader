@@ -82,7 +82,7 @@ func (b *Binance) UExchangeInfo(ctx context.Context) (UFuturesExchangeInfo, erro
 	return resp, b.SendHTTPRequest(ctx, exchange.RestUSDTMargined, ufuturesExchangeInfo, uFuturesDefaultRate, &resp)
 }
 
-// UFuturesOrderbook gets orderbook data for usdt margined futures
+// // UFuturesOrderbook gets orderbook data for usdt margined futures
 func (b *Binance) UFuturesOrderbook(ctx context.Context, symbol currency.Pair, limit int64) (*OrderBook, error) {
 	symbolValue, err := b.FormatSymbol(symbol, asset.USDTMarginedFutures)
 	if err != nil {
@@ -116,7 +116,7 @@ func (b *Binance) UFuturesOrderbook(ctx context.Context, symbol currency.Pair, l
 	if err != nil {
 		return nil, err
 	}
-
+	fmt.Println("Fetched orderbook LastUpdateID:", data.LastUpdateID)
 	resp := OrderBook{
 		Symbol:       symbolValue,
 		LastUpdateID: data.LastUpdateID,

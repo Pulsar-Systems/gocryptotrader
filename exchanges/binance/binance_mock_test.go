@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/thrasher-corp/gocryptotrader/config"
+	exchange "github.com/thrasher-corp/gocryptotrader/exchanges"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/mock"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/sharedtestvalues"
@@ -41,7 +42,7 @@ func TestMain(m *testing.M) {
 		log.Fatal("Binance setup error", err)
 	}
 
-	b.setupOrderbookManager()
+	b.setupOrderbookManager(exchange.WebsocketSpot)
 
 	serverDetails, newClient, err := mock.NewVCRServer(mockfile)
 	if err != nil {

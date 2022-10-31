@@ -18,7 +18,7 @@ func (t *binanceTime) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Time returns a time.Time object
+// // Time returns a time.Time object
 func (t binanceTime) Time() time.Time {
 	return time.Time(t)
 }
