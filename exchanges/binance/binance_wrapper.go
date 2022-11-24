@@ -1134,12 +1134,12 @@ func (b *Binance) CancelOrder(ctx context.Context, o *order.Cancel) error {
 			return err
 		}
 	case asset.CoinMarginedFutures:
-		_, err := b.FuturesCancelOrder(ctx, o.Pair, o.OrderID, "")
+		_, err := b.FuturesCancelOrder(ctx, o.Pair, o.OrderID, o.AccountID)
 		if err != nil {
 			return err
 		}
 	case asset.USDTMarginedFutures:
-		_, err := b.UCancelOrder(ctx, o.Pair, o.OrderID, "")
+		_, err := b.UCancelOrder(ctx, o.Pair, o.OrderID, o.AccountID)
 		if err != nil {
 			return err
 		}
