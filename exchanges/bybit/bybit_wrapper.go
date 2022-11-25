@@ -194,7 +194,14 @@ func (by *Bybit) Setup(exch *config.Exchange) error {
 			return err
 		}
 	}
+	err := by.SetupSpot(exch)
+	if err != nil {
+		return err
+	}
+	return by.SetupFuture(exch)
+}
 
+func (by *Bybit) SetupSpot(exch *config.Exchange) error {
 	wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
 	if err != nil {
 		return err

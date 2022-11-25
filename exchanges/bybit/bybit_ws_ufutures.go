@@ -26,6 +26,9 @@ import (
 )
 
 const (
+	wsUFuturesPublicTopicV2  = "realtime_public"
+	wsUFuturesPrivateTopicV2 = "realtime_private"
+
 	wsUSDTKline         = "candle"
 	wsTickerUFutures    = "instrument_info.100ms"
 	wsTradesUFutures    = "trade" // Same as spot
@@ -54,9 +57,9 @@ func (by *Bybit) SetupFuture(exch *config.Exchange) error {
 	err := by.WebsocketUFuture.Setup(
 		&stream.WebsocketSetup{
 			ExchangeConfig:        exch,
-			DefaultURL:            "wss://stream.bybit.com/realtime_public",
-			RunningURL:            "wss://stream.bybit.com/realtime_public",
-			RunningURLAuth:        "wss://stream.bybit.com/realtime_private",
+			DefaultURL:            bybitWSBaseURL + wsUFuturesPublicTopicV2,
+			RunningURL:            bybitWSBaseURL + wsUFuturesPublicTopicV2,
+			RunningURLAuth:        bybitWSBaseURL + wsUFuturesPrivateTopicV2,
 			Connector:             by.WsUSDTConnect,
 			Subscriber:            by.SubscribeUSDT,
 			Unsubscriber:          by.UnsubscribeUSDT,
@@ -82,7 +85,7 @@ func (by *Bybit) SetupFuture(exch *config.Exchange) error {
 	}
 
 	return by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
-		URL:                  "wss://stream.bybit.com/realtime_private",
+		URL:                  bybitWSBaseURL + wsUFuturesPrivateTopicV2,
 		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
 		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
 		Authenticated:        true,
@@ -179,15 +182,16 @@ func (by *Bybit) GenerateDefaultSubscriptionsUFutures() ([]stream.ChannelSubscri
 	if err != nil {
 		return nil, err
 	}
-	for z := range pairs {
-		for x := range channels {
+	for _, p := range pairs {
+		pStr := p.Format(currency.PairFormat{Uppercase: true, Delimiter: ""}).String()
+		for _, c := range channels {
 			subscriptions = append(subscriptions,
 				stream.ChannelSubscription{
-					Channel:  channels[x],
-					Currency: pairs[z],
+					Channel:  c,
+					Currency: p,
 					Asset:    asset.USDTMarginedFutures,
 					Params: map[string]interface{}{
-						"pair": strings.Replace(pairs[z].String(), "-", "", -1),
+						"pair": pStr,
 					},
 				})
 		}
