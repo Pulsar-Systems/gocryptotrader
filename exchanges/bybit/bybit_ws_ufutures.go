@@ -72,21 +72,21 @@ func (by *Bybit) SetupFuture(exch *config.Exchange) error {
 		return err
 	}
 
-	return by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
+	err = by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
 		URL:                  by.WebsocketUFuture.GetWebsocketURL(),
 		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
 		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
 	})
-	// if err != nil {
-	// 	return err
-	// }
+	if err != nil {
+		return err
+	}
 
-	// return by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
-	// 	URL:                  bybitWSBaseURL + wsSpotPrivate,
-	// 	ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-	// 	ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-	// 	Authenticated:        true,
-	// })
+	return by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  by.WebsocketUFuture.GetWebsocketURL(),
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		Authenticated:        true,
+	})
 }
 
 // WsUSDTConnect connects to a USDT websocket feed

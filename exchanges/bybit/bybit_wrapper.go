@@ -233,14 +233,13 @@ func (by *Bybit) Setup(exch *config.Exchange) error {
 	if err != nil {
 		return err
 	}
-	return err
 
-	// return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
-	// 	URL:                  bybitWSBaseURL + wsSpotPrivate,
-	// 	ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-	// 	ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-	// 	Authenticated:        true,
-	// })
+	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  by.Websocket.GetWebsocketURL(),
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		Authenticated:        true,
+	})
 }
 
 // AuthenticateWebsocket sends an authentication message to the websocket
