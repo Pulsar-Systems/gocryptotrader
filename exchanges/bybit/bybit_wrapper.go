@@ -235,7 +235,7 @@ func (by *Bybit) Setup(exch *config.Exchange) error {
 	}
 
 	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
-		URL:                  by.Websocket.GetWebsocketURL(),
+		URL:                  bybitWSBaseURL + wsSpotPrivate,
 		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
 		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
 		Authenticated:        true,

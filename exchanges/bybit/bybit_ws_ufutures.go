@@ -82,7 +82,7 @@ func (by *Bybit) SetupFuture(exch *config.Exchange) error {
 	}
 
 	return by.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
-		URL:                  by.WebsocketUFuture.GetWebsocketURL(),
+		URL:                  "wss://stream.bybit.com/realtime_private",
 		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
 		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
 		Authenticated:        true,
