@@ -236,11 +236,6 @@ func (by *Bybit) SetupSpot(exch *config.Exchange) error {
 	if err != nil {
 		return err
 	}
-	err = by.SetupFuture(exch)
-	if err != nil {
-		return err
-	}
-
 	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
 		URL:                  bybitWSBaseURL + wsSpotPrivate,
 		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
