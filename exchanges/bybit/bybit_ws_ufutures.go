@@ -15,6 +15,7 @@ import (
 	"github.com/thrasher-corp/gocryptotrader/common/crypto"
 	"github.com/thrasher-corp/gocryptotrader/config"
 	"github.com/thrasher-corp/gocryptotrader/currency"
+	exchange "github.com/thrasher-corp/gocryptotrader/exchanges"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/orderbook"
@@ -37,28 +38,16 @@ const (
 )
 
 func (by *Bybit) SetupFuture(exch *config.Exchange) error {
-	if !exch.Enabled {
-		by.SetEnabled(false)
-		return nil
+	wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketUFuture)
+	if err != nil {
+		return err
 	}
 
-	if by.Config == nil {
-		err := by.SetupDefaults(exch)
-		if err != nil {
-			return err
-		}
-	}
-
-	// wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
-	// if err != nil {
-	// 	return err
-	// }
-
-	err := by.WebsocketUFuture.Setup(
+	err = by.WebsocketUFuture.Setup(
 		&stream.WebsocketSetup{
 			ExchangeConfig:        exch,
 			DefaultURL:            bybitWSBaseURL + wsUFuturesPublicTopicV2,
-			RunningURL:            bybitWSBaseURL + wsUFuturesPublicTopicV2,
+			RunningURL:            wsRunningEndpoint,
 			RunningURLAuth:        bybitWSBaseURL + wsUFuturesPrivateTopicV2,
 			Connector:             by.WsUSDTConnect,
 			Subscriber:            by.SubscribeUSDT,
@@ -94,7 +83,7 @@ func (by *Bybit) SetupFuture(exch *config.Exchange) error {
 
 // WsUSDTConnect connects to a USDT websocket feed
 func (by *Bybit) WsUSDTConnect() error {
-	if !by.WebsocketUFuture.IsEnabled() || !by.IsEnabled() {
+	if !by.WebsocketUFuture.IsEnabled() || !by.IsEnabled() || !by.IsAssetWebsocketSupported(asset.USDTMarginedFutures) {
 		return errors.New(stream.WebsocketNotEnabled)
 	}
 	var dialer websocket.Dialer
@@ -116,7 +105,7 @@ func (by *Bybit) WsUSDTConnect() error {
 		log.Debugf(log.ExchangeSys, "%s Connected to WebsocketUFuture.\n", by.Name)
 	}
 
-	go by.wsUSDTReadData()
+	go by.wsUSDTReadData(by.WebsocketUFuture.Conn)
 	if by.IsWebsocketAuthenticationSupported() {
 		err = by.WsUSDTAuth(context.TODO())
 		if err != nil {
@@ -130,6 +119,24 @@ func (by *Bybit) WsUSDTConnect() error {
 
 // WsUSDTAuth sends an authentication message to receive auth data
 func (by *Bybit) WsUSDTAuth(ctx context.Context) error {
+	var dialer websocket.Dialer
+	err := by.WebsocketUFuture.AuthConn.Dial(&dialer, http.Header{})
+	if err != nil {
+		return err
+	}
+
+	pingMsg, err := json.Marshal(pingRequest)
+	if err != nil {
+		return err
+	}
+	by.WebsocketUFuture.Conn.SetupPingHandler(stream.PingHandler{
+		Message:     pingMsg,
+		MessageType: websocket.PingMessage,
+		Delay:       bybitWebsocketTimer,
+	})
+
+	go by.wsUSDTReadData(by.WebsocketUFuture.AuthConn)
+
 	creds, err := by.GetCredentials(ctx)
 	if err != nil {
 		return err
@@ -150,7 +157,7 @@ func (by *Bybit) WsUSDTAuth(ctx context.Context) error {
 		Operation: "auth",
 		Args:      []interface{}{creds.Key, intNonce, sign},
 	}
-	return by.WebsocketUFuture.Conn.SendJSONMessage(req)
+	return by.WebsocketUFuture.AuthConn.SendJSONMessage(req)
 }
 
 // SubscribeUSDT sends a websocket message to receive data from the channel
@@ -227,7 +234,7 @@ func (by *Bybit) UnsubscribeUSDT(channelsToUnsubscribe []stream.ChannelSubscript
 }
 
 // wsUSDTReadData gets and passes on websocket messages for processing
-func (by *Bybit) wsUSDTReadData() {
+func (by *Bybit) wsUSDTReadData(ws stream.Connection) {
 	by.WebsocketUFuture.Wg.Add(1)
 	defer by.WebsocketUFuture.Wg.Done()
 
@@ -236,7 +243,7 @@ func (by *Bybit) wsUSDTReadData() {
 		case <-by.WebsocketUFuture.ShutdownC:
 			return
 		default:
-			resp := by.WebsocketUFuture.Conn.ReadMessage()
+			resp := ws.ReadMessage()
 			if resp.Raw == nil {
 				return
 			}
@@ -247,6 +254,82 @@ func (by *Bybit) wsUSDTReadData() {
 			}
 		}
 	}
+}
+
+// processOrderbook processes orderbook updates
+func (by *Bybit) processOrderbookUFutures(data []WsFuturesOrderbookData, action string, p currency.Pair, a asset.Item) error {
+	if len(data) < 1 {
+		return errors.New("no orderbook data")
+	}
+
+	switch action {
+	case wsOperationSnapshot:
+		var book orderbook.Base
+		for i := range data {
+			item := orderbook.Item{
+				Price:  data[i].Price,
+				Amount: data[i].Size,
+				ID:     data[i].ID,
+			}
+			switch {
+			case strings.EqualFold(data[i].Side, sideSell):
+				book.Asks = append(book.Asks, item)
+			case strings.EqualFold(data[i].Side, sideBuy):
+				book.Bids = append(book.Bids, item)
+			default:
+				return fmt.Errorf("could not process websocket orderbook update, order side could not be matched for %s",
+					data[i].Side)
+			}
+		}
+		// For some reason Bybit sends the orderbook in a single list imitating a spread
+		// Therefore the orderbook bids must be reversed
+		book.Bids.Reverse()
+		book.Asset = a
+		book.Pair = p
+		book.Exchange = by.Name
+		book.VerifyOrderbook = by.CanVerifyOrderbook
+
+		err := by.WebsocketUFuture.Orderbook.LoadSnapshot(&book)
+		if err != nil {
+			return fmt.Errorf("process orderbook error -  %s", err)
+		}
+	default:
+		updateAction, err := by.GetActionFromString(action)
+		if err != nil {
+			return err
+		}
+
+		var asks, bids []orderbook.Item
+		for i := range data {
+			item := orderbook.Item{
+				Price:  data[i].Price,
+				Amount: data[i].Size,
+				ID:     data[i].ID,
+			}
+
+			switch {
+			case strings.EqualFold(data[i].Side, sideSell):
+				asks = append(asks, item)
+			case strings.EqualFold(data[i].Side, sideBuy):
+				bids = append(bids, item)
+			default:
+				return fmt.Errorf("could not process websocket orderbook update, order side could not be matched for %s",
+					data[i].Side)
+			}
+		}
+
+		err = by.WebsocketUFuture.Orderbook.Update(&orderbook.Update{
+			Bids:   bids,
+			Asks:   asks,
+			Pair:   p,
+			Asset:  a,
+			Action: updateAction,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
@@ -748,81 +831,5 @@ func (by *Bybit) wsUSDTHandleData(respRaw []byte) error {
 		by.WebsocketUFuture.DataHandler <- stream.UnhandledMessageWarning{Message: by.Name + stream.UnhandledMessage + string(respRaw)}
 	}
 
-	return nil
-}
-
-// processOrderbook processes orderbook updates
-func (by *Bybit) processOrderbookUFutures(data []WsFuturesOrderbookData, action string, p currency.Pair, a asset.Item) error {
-	if len(data) < 1 {
-		return errors.New("no orderbook data")
-	}
-
-	switch action {
-	case wsOperationSnapshot:
-		var book orderbook.Base
-		for i := range data {
-			item := orderbook.Item{
-				Price:  data[i].Price,
-				Amount: data[i].Size,
-				ID:     data[i].ID,
-			}
-			switch {
-			case strings.EqualFold(data[i].Side, sideSell):
-				book.Asks = append(book.Asks, item)
-			case strings.EqualFold(data[i].Side, sideBuy):
-				book.Bids = append(book.Bids, item)
-			default:
-				return fmt.Errorf("could not process websocket orderbook update, order side could not be matched for %s",
-					data[i].Side)
-			}
-		}
-		// For some reason Bybit sends the orderbook in a single list imitating a spread
-		// Therefore the orderbook bids must be reversed
-		book.Bids.Reverse()
-		book.Asset = a
-		book.Pair = p
-		book.Exchange = by.Name
-		book.VerifyOrderbook = by.CanVerifyOrderbook
-
-		err := by.WebsocketUFuture.Orderbook.LoadSnapshot(&book)
-		if err != nil {
-			return fmt.Errorf("process orderbook error -  %s", err)
-		}
-	default:
-		updateAction, err := by.GetActionFromString(action)
-		if err != nil {
-			return err
-		}
-
-		var asks, bids []orderbook.Item
-		for i := range data {
-			item := orderbook.Item{
-				Price:  data[i].Price,
-				Amount: data[i].Size,
-				ID:     data[i].ID,
-			}
-
-			switch {
-			case strings.EqualFold(data[i].Side, sideSell):
-				asks = append(asks, item)
-			case strings.EqualFold(data[i].Side, sideBuy):
-				bids = append(bids, item)
-			default:
-				return fmt.Errorf("could not process websocket orderbook update, order side could not be matched for %s",
-					data[i].Side)
-			}
-		}
-
-		err = by.WebsocketUFuture.Orderbook.Update(&orderbook.Update{
-			Bids:   bids,
-			Asks:   asks,
-			Pair:   p,
-			Asset:  a,
-			Action: updateAction,
-		})
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }

@@ -248,6 +248,7 @@ const (
 	RestSandbox
 	WebsocketSpot
 	WebsocketSpotSupplementary
+	WebsocketUFuture
 	ChainAnalysis
 	EdgeCase1
 	EdgeCase2
@@ -263,6 +264,7 @@ const (
 	restSwapURL                   = "RestSwapURL"
 	websocketSpotURL              = "WebsocketSpotURL"
 	websocketSpotSupplementaryURL = "WebsocketSpotSupplementaryURL"
+	websocketUFutureURL           = "WebsocketUFutureURL"
 	chainAnalysisURL              = "ChainAnalysisURL"
 	edgeCase1URL                  = "EdgeCase1URL"
 	edgeCase2URL                  = "EdgeCase2URL"
@@ -279,6 +281,7 @@ var keyURLs = []URL{RestSpot,
 	RestSandbox,
 	WebsocketSpot,
 	WebsocketSpotSupplementary,
+	WebsocketUFuture,
 	ChainAnalysis,
 	EdgeCase1,
 	EdgeCase2,

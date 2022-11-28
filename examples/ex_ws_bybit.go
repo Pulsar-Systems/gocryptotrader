@@ -45,13 +45,16 @@ func setupBybitAndPrintOrderBook() {
 	}
 	fmt.Printf("by.Websocket.IsConnected(): %v\n", by.Websocket.IsConnected())
 	fmt.Printf("by.Websocket.GetWebsocketURL(): %v\n", by.Websocket.GetWebsocketURL())
-	fmt.Println(by.CurrencyPairs.IsAssetEnabled(asset.Spot))
+	fmt.Printf("Asset Spot enabled: %v\n", by.CurrencyPairs.IsAssetEnabled(asset.Spot) == nil)
+
 	err = by.WebsocketUFuture.Connect()
 	if err != nil {
 		fmt.Println("by.WebsocketUFuture.Connect ", err)
+		fmt.Println(!by.WebsocketUFuture.IsEnabled(), !by.IsEnabled(), !by.IsAssetWebsocketSupported(asset.USDTMarginedFutures))
 	}
 	fmt.Printf("by.WebsocketUFuture.IsConnected(): %v\n", by.WebsocketUFuture.IsConnected())
 	fmt.Printf("by.WebsocketUFuture.GetWebsocketURL(): %v\n", by.WebsocketUFuture.GetWebsocketURL())
+	fmt.Printf("Asset UFuture enabled: %v\n", by.CurrencyPairs.IsAssetEnabled(asset.USDTMarginedFutures) == nil)
 
 	p := currency.Pair{
 		Delimiter: "-",
@@ -84,14 +87,14 @@ func setupBybitAndPrintOrderBook() {
 		}
 
 		// fmt.Printf("orbRest1.LastUpdateID: %v\n", orbRest1.Time)
-		fmt.Printf("orbWs1.LastUpdateID: %v\n", orbWs2.LastUpdated)
+		fmt.Printf("orbWs2.LastUpdateID: %v\n", orbWs2.LastUpdated)
 		// fmt.Println("Diff:", orbRest1.Time.UnixMicro()-orbWs1.LastUpdated.UnixMicro())
 		// fmt.Printf("orbRest1.Bids: ")
 		// for _, b := range orbRest1.Bids[:5] {
 		// 	fmt.Printf("{%v %v}, ", b.Price, b.Amount)
 		// }
 		// fmt.Println()
-		fmt.Printf("orbWs1.Bids  : ")
+		fmt.Printf("orbWs2.Bids  : ")
 		for _, b := range orbWs2.Bids[:5] {
 			fmt.Printf("{%v %v}, ", b.Price, b.Amount)
 		}
