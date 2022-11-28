@@ -22,7 +22,6 @@ import (
 	"github.com/thrasher-corp/gocryptotrader/exchanges/protocol"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
-	"github.com/thrasher-corp/gocryptotrader/exchanges/stream/buffer"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/ticker"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/trade"
 	"github.com/thrasher-corp/gocryptotrader/log"
@@ -72,10 +71,10 @@ func (by *Bybit) SetDefaults() {
 		log.Errorln(log.ExchangeSys, err)
 	}
 
-	err = by.DisableAssetWebsocketSupport(asset.USDTMarginedFutures)
-	if err != nil {
-		log.Errorln(log.ExchangeSys, err)
-	}
+	// err = by.DisableAssetWebsocketSupport(asset.USDTMarginedFutures)
+	// if err != nil {
+	// 	log.Errorln(log.ExchangeSys, err)
+	// }
 
 	err = by.DisableAssetWebsocketSupport(asset.Futures)
 	if err != nil {
@@ -169,6 +168,7 @@ func (by *Bybit) SetDefaults() {
 		exchange.RestFutures:      bybitAPIURL,
 		exchange.RestUSDCMargined: bybitAPIURL,
 		exchange.WebsocketSpot:    bybitWSBaseURL + wsSpotPublicTopicV2,
+		exchange.WebsocketUFuture: bybitWSBaseURL + wsUFuturesPublicTopicV2,
 	})
 	if err != nil {
 		log.Errorln(log.ExchangeSys, err)
@@ -199,49 +199,6 @@ func (by *Bybit) Setup(exch *config.Exchange) error {
 		return err
 	}
 	return by.SetupFuture(exch)
-}
-
-func (by *Bybit) SetupSpot(exch *config.Exchange) error {
-	wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
-	if err != nil {
-		return err
-	}
-
-	err = by.Websocket.Setup(
-		&stream.WebsocketSetup{
-			ExchangeConfig:        exch,
-			DefaultURL:            bybitWSBaseURL + wsSpotPublicTopicV2,
-			RunningURL:            wsRunningEndpoint,
-			RunningURLAuth:        bybitWSBaseURL + wsSpotPrivate,
-			Connector:             by.WsConnect,
-			Subscriber:            by.Subscribe,
-			Unsubscriber:          by.Unsubscribe,
-			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.Spot),
-			Features:              &by.Features.Supports.WebsocketCapabilities,
-			OrderbookBufferConfig: buffer.Config{
-				SortBuffer:            true,
-				SortBufferByUpdateIDs: true,
-			},
-			TradeFeed: by.Features.Enabled.TradeFeed,
-		})
-	if err != nil {
-		return err
-	}
-
-	err = by.Websocket.SetupNewConnection(stream.ConnectionSetup{
-		URL:                  by.Websocket.GetWebsocketURL(),
-		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-	})
-	if err != nil {
-		return err
-	}
-	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
-		URL:                  bybitWSBaseURL + wsSpotPrivate,
-		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
-		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
-		Authenticated:        true,
-	})
 }
 
 // AuthenticateWebsocket sends an authentication message to the websocket

@@ -13,11 +13,14 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/thrasher-corp/gocryptotrader/common"
 	"github.com/thrasher-corp/gocryptotrader/common/crypto"
+	"github.com/thrasher-corp/gocryptotrader/config"
 	"github.com/thrasher-corp/gocryptotrader/currency"
+	exchange "github.com/thrasher-corp/gocryptotrader/exchanges"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/orderbook"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream/buffer"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/ticker"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/trade"
 	"github.com/thrasher-corp/gocryptotrader/log"
@@ -45,6 +48,49 @@ const (
 
 var comms = make(chan stream.Response)
 
+func (by *Bybit) SetupSpot(exch *config.Exchange) error {
+	wsRunningEndpoint, err := by.API.Endpoints.GetURL(exchange.WebsocketSpot)
+	if err != nil {
+		return err
+	}
+
+	err = by.Websocket.Setup(
+		&stream.WebsocketSetup{
+			ExchangeConfig:        exch,
+			DefaultURL:            bybitWSBaseURL + wsSpotPublicTopicV2,
+			RunningURL:            wsRunningEndpoint,
+			RunningURLAuth:        bybitWSBaseURL + wsSpotPrivate,
+			Connector:             by.WsConnect,
+			Subscriber:            by.Subscribe,
+			Unsubscriber:          by.Unsubscribe,
+			GenerateSubscriptions: by.GenerateDefaultSubscriptionsFactory(asset.Spot),
+			Features:              &by.Features.Supports.WebsocketCapabilities,
+			OrderbookBufferConfig: buffer.Config{
+				SortBuffer:            true,
+				SortBufferByUpdateIDs: true,
+			},
+			TradeFeed: by.Features.Enabled.TradeFeed,
+		})
+	if err != nil {
+		return err
+	}
+
+	err = by.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  by.Websocket.GetWebsocketURL(),
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+	})
+	if err != nil {
+		return err
+	}
+	return by.Websocket.SetupNewConnection(stream.ConnectionSetup{
+		URL:                  bybitWSBaseURL + wsSpotPrivate,
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		Authenticated:        true,
+	})
+}
+
 // WsConnect connects to a websocket feed
 func (by *Bybit) WsConnect() error {
 	if !by.Websocket.IsEnabled() || !by.IsEnabled() || !by.IsAssetWebsocketSupported(asset.Spot) {
@@ -60,8 +106,10 @@ func (by *Bybit) WsConnect() error {
 		Message:     []byte(`{"op":"ping"}`),
 		Delay:       bybitWebsocketTimer,
 	})
+	if by.Verbose {
+		log.Debugf(log.ExchangeSys, "%s Connected to WebsocketSpot.\n", by.Name)
+	}
 
-	by.Websocket.Wg.Add(1)
 	go by.wsReadData(by.Websocket.Conn)
 	if by.IsWebsocketAuthenticationSupported() {
 		err = by.WsAuth(context.TODO())
@@ -90,7 +138,6 @@ func (by *Bybit) WsAuth(ctx context.Context) error {
 		Delay:       bybitWebsocketTimer,
 	})
 
-	by.Websocket.Wg.Add(1)
 	go by.wsReadData(by.Websocket.AuthConn)
 
 	creds, err := by.GetCredentials(ctx)
@@ -186,6 +233,7 @@ func (by *Bybit) Unsubscribe(channelsToUnsubscribe []stream.ChannelSubscription)
 
 // wsReadData receives and passes on websocket messages for processing
 func (by *Bybit) wsReadData(ws stream.Connection) {
+	by.Websocket.Wg.Add(1)
 	defer by.Websocket.Wg.Done()
 	for {
 		resp := ws.ReadMessage()
