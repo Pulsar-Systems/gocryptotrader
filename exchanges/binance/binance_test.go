@@ -2572,12 +2572,12 @@ func TestProcessUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = b.obm.fetchBookViaREST(p)
+	err = b.obm.fetchBookViaREST(p, asset.Spot)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = b.obm.cleanup(p)
+	err = b.obm.cleanup(p, asset.Spot)
 	if err != nil {
 		t.Fatal(err)
 	}
