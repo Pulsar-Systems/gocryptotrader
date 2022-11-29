@@ -77,18 +77,18 @@ func (b *Binance) WsConnectUFutures() error {
 // KeepAuthKeyAlive will continuously send messages to
 // keep the WS auth key active
 func (b *Binance) KeepAuthKeyAliveUFutures() {
-	b.Websocket.Wg.Add(1)
-	defer b.Websocket.Wg.Done()
+	b.WebsocketUFuture.Wg.Add(1)
+	defer b.WebsocketUFuture.Wg.Done()
 	ticks := time.NewTicker(time.Minute * 30)
 	for {
 		select {
-		case <-b.Websocket.ShutdownC:
+		case <-b.WebsocketUFuture.ShutdownC:
 			ticks.Stop()
 			return
 		case <-ticks.C:
 			err := b.MaintainWsAuthStreamKey(context.TODO())
 			if err != nil {
-				b.Websocket.DataHandler <- err
+				b.WebsocketUFuture.DataHandler <- err
 				log.Warnf(log.ExchangeSys,
 					b.Name+" - Unable to renew auth websocket token, may experience shutdown")
 			}
