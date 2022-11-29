@@ -22,56 +22,57 @@ import (
 )
 
 const (
-	binanceUFuturesDefaultWebsocketURL = "wss://fstream.binance.com/stream"
+	binanceDefaultWebsocketURL = "wss://stream.binance.com:9443/stream"
 )
 
 // WsConnect initiates a websocket connection
-func (b *Binance) WsConnectUFutures() error {
-	if !b.WebsocketUFuture.IsEnabled() || !b.IsEnabled() {
+func (b *Binance) WsConnect() error {
+	if !b.Websocket.IsEnabled() || !b.IsEnabled() {
 		return errors.New(stream.WebsocketNotEnabled)
 	}
+
 	var dialer websocket.Dialer
 	dialer.HandshakeTimeout = b.Config.HTTPTimeout
 	dialer.Proxy = http.ProxyFromEnvironment
 	var err error
-	if b.WebsocketUFuture.CanUseAuthenticatedEndpoints() {
+	if b.Websocket.CanUseAuthenticatedEndpoints() {
 		listenKey, err = b.GetWsAuthStreamKey(context.TODO())
 		if err != nil {
-			b.WebsocketUFuture.SetCanUseAuthenticatedEndpoints(false)
+			b.Websocket.SetCanUseAuthenticatedEndpoints(false)
 			log.Errorf(log.ExchangeSys,
-				"%v unable to connect to authenticated UFutures Websocket. Error: %s",
+				"%v unable to connect to authenticated Websocket. Error: %s",
 				b.Name,
 				err)
 		} else {
 			// cleans on failed connection
-			clean := strings.Split(b.WebsocketUFuture.GetWebsocketURL(), "?streams=")
+			clean := strings.Split(b.Websocket.GetWebsocketURL(), "?streams=")
 			authPayload := clean[0] + "?streams=" + listenKey
-			err = b.WebsocketUFuture.SetWebsocketURL(authPayload, false, false)
+			err = b.Websocket.SetWebsocketURL(authPayload, false, false)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	err = b.WebsocketUFuture.Conn.Dial(&dialer, http.Header{})
+	err = b.Websocket.Conn.Dial(&dialer, http.Header{})
 	if err != nil {
-		return fmt.Errorf("%v - Unable to connect to UFutures Websocket. Error: %s",
+		return fmt.Errorf("%v - Unable to connect to Websocket. Error: %s",
 			b.Name,
 			err)
 	}
 
-	if b.WebsocketUFuture.CanUseAuthenticatedEndpoints() {
-		go b.KeepAuthKeyAliveUFutures()
+	if b.Websocket.CanUseAuthenticatedEndpoints() {
+		go b.KeepAuthKeyAlive()
 	}
 
-	b.WebsocketUFuture.Conn.SetupPingHandler(stream.PingHandler{
+	b.Websocket.Conn.SetupPingHandler(stream.PingHandler{
 		UseGorillaHandler: true,
 		MessageType:       websocket.PongMessage,
 		Delay:             pingDelay,
 	})
 
-	b.WebsocketUFuture.Wg.Add(1)
-	go b.wsReadDataUFutures()
+	b.Websocket.Wg.Add(1)
+	go b.wsReadData()
 
 	b.setupOrderbookManager()
 	return nil
@@ -79,7 +80,7 @@ func (b *Binance) WsConnectUFutures() error {
 
 // KeepAuthKeyAlive will continuously send messages to
 // keep the WS auth key active
-func (b *Binance) KeepAuthKeyAliveUFutures() {
+func (b *Binance) KeepAuthKeyAlive() {
 	b.Websocket.Wg.Add(1)
 	defer b.Websocket.Wg.Done()
 	ticks := time.NewTicker(time.Minute * 30)
@@ -99,21 +100,23 @@ func (b *Binance) KeepAuthKeyAliveUFutures() {
 	}
 }
 
-func (b *Binance) wsReadDataUFutures() {
-	defer b.WebsocketUFuture.Wg.Done()
+// wsReadData receives and passes on websocket messages for processing
+func (b *Binance) wsReadData() {
+	defer b.Websocket.Wg.Done()
+
 	for {
-		resp := b.WebsocketUFuture.Conn.ReadMessage()
+		resp := b.Websocket.Conn.ReadMessage()
 		if resp.Raw == nil {
 			return
 		}
-		err := b.wsHandleDataUFutures(resp.Raw)
+		err := b.wsHandleData(resp.Raw)
 		if err != nil {
-			b.WebsocketUFuture.DataHandler <- err
+			b.Websocket.DataHandler <- err
 		}
 	}
 }
 
-func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
+func (b *Binance) wsHandleData(respRaw []byte) error {
 	var multiStreamData map[string]interface{}
 	err := json.Unmarshal(respRaw, &multiStreamData)
 	if err != nil {
@@ -146,7 +149,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						b.Name,
 						err)
 				}
-				b.WebsocketUFuture.DataHandler <- data
+				b.Websocket.DataHandler <- data
 				return nil
 			case "outboundAccountPosition":
 				var data wsAccountPosition
@@ -156,7 +159,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						b.Name,
 						err)
 				}
-				b.WebsocketUFuture.DataHandler <- data
+				b.Websocket.DataHandler <- data
 				return nil
 			case "balanceUpdate":
 				var data wsBalanceUpdate
@@ -166,7 +169,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						b.Name,
 						err)
 				}
-				b.WebsocketUFuture.DataHandler <- data
+				b.Websocket.DataHandler <- data
 				return nil
 			case "executionReport":
 				var data wsOrderUpdate
@@ -192,7 +195,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 				orderID := strconv.FormatInt(data.Data.OrderID, 10)
 				orderStatus, err := stringToOrderStatus(data.Data.OrderStatus)
 				if err != nil {
-					b.WebsocketUFuture.DataHandler <- order.ClassificationError{
+					b.Websocket.DataHandler <- order.ClassificationError{
 						Exchange: b.Name,
 						OrderID:  orderID,
 						Err:      err,
@@ -204,7 +207,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 				}
 				orderType, err := order.StringToOrderType(data.Data.OrderType)
 				if err != nil {
-					b.WebsocketUFuture.DataHandler <- order.ClassificationError{
+					b.Websocket.DataHandler <- order.ClassificationError{
 						Exchange: b.Name,
 						OrderID:  orderID,
 						Err:      err,
@@ -212,13 +215,13 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 				}
 				orderSide, err := order.StringToOrderSide(data.Data.Side)
 				if err != nil {
-					b.WebsocketUFuture.DataHandler <- order.ClassificationError{
+					b.Websocket.DataHandler <- order.ClassificationError{
 						Exchange: b.Name,
 						OrderID:  orderID,
 						Err:      err,
 					}
 				}
-				b.WebsocketUFuture.DataHandler <- &order.Detail{
+				b.Websocket.DataHandler <- &order.Detail{
 					Price:                data.Data.Price,
 					Amount:               data.Data.Quantity,
 					AverageExecutedPrice: averagePrice,
@@ -248,7 +251,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						b.Name,
 						err)
 				}
-				b.WebsocketUFuture.DataHandler <- data
+				b.Websocket.DataHandler <- data
 				return nil
 			}
 		}
@@ -262,12 +265,12 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 					return err
 				}
 
-				pairs, err := b.GetEnabledPairs(asset.USDTMarginedFutures)
+				pairs, err := b.GetEnabledPairs(asset.Spot)
 				if err != nil {
 					return err
 				}
 
-				format, err := b.GetPairFormat(asset.USDTMarginedFutures, true)
+				format, err := b.GetPairFormat(asset.Spot, true)
 				if err != nil {
 					return err
 				}
@@ -308,14 +311,14 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						return err
 					}
 
-					return b.WebsocketUFuture.Trade.Update(saveTradeData,
+					return b.Websocket.Trade.Update(saveTradeData,
 						trade.Data{
 							CurrencyPair: pair,
 							Timestamp:    t.TimeStamp,
 							Price:        price,
 							Amount:       amount,
 							Exchange:     b.Name,
-							AssetType:    asset.USDTMarginedFutures,
+							AssetType:    asset.Spot,
 							TID:          strconv.FormatInt(t.TradeID, 10),
 						})
 				case "ticker":
@@ -332,7 +335,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						return err
 					}
 
-					b.WebsocketUFuture.DataHandler <- &ticker.Price{
+					b.Websocket.DataHandler <- &ticker.Price{
 						ExchangeName: b.Name,
 						Open:         t.OpenPrice,
 						Close:        t.ClosePrice,
@@ -344,7 +347,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						Ask:          t.BestAskPrice,
 						Last:         t.LastPrice,
 						LastUpdated:  t.EventTime,
-						AssetType:    asset.USDTMarginedFutures,
+						AssetType:    asset.Spot,
 						Pair:         pair,
 					}
 					return nil
@@ -363,10 +366,10 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 						return err
 					}
 
-					b.WebsocketUFuture.DataHandler <- stream.KlineData{
+					b.Websocket.DataHandler <- stream.KlineData{
 						Timestamp:  kline.EventTime,
 						Pair:       pair,
-						AssetType:  asset.USDTMarginedFutures,
+						AssetType:  asset.Spot,
 						Exchange:   b.Name,
 						StartTime:  kline.Kline.StartTime,
 						CloseTime:  kline.Kline.CloseTime,
@@ -386,7 +389,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 							b.Name,
 							err)
 					}
-					init, err := b.UpdateLocalBufferUFutures(&depth)
+					init, err := b.UpdateLocalBuffer(&depth)
 					if err != nil {
 						if init {
 							return nil
@@ -397,7 +400,7 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 					}
 					return nil
 				default:
-					b.WebsocketUFuture.DataHandler <- stream.UnhandledMessageWarning{
+					b.Websocket.DataHandler <- stream.UnhandledMessageWarning{
 						Message: b.Name + stream.UnhandledMessage + string(respRaw),
 					}
 				}
@@ -408,19 +411,23 @@ func (b *Binance) wsHandleDataUFutures(respRaw []byte) error {
 }
 
 // SeedLocalCache seeds depth data
-func (b *Binance) SeedLocalCacheUFutures(ctx context.Context, p currency.Pair) error {
-	ob, err := b.UFuturesOrderbook(context.TODO(), p, 1000)
+func (b *Binance) SeedLocalCache(ctx context.Context, p currency.Pair) error {
+	ob, err := b.GetOrderBook(ctx,
+		OrderBookDataRequestParams{
+			Symbol: p,
+			Limit:  1000,
+		})
 	if err != nil {
 		return err
 	}
-	return b.SeedLocalCacheWithBookUFutures(p, ob)
+	return b.SeedLocalCacheWithBook(p, ob)
 }
 
 // SeedLocalCacheWithBook seeds the local orderbook cache
-func (b *Binance) SeedLocalCacheWithBookUFutures(p currency.Pair, orderbookNew *OrderBook) error {
+func (b *Binance) SeedLocalCacheWithBook(p currency.Pair, orderbookNew *OrderBook) error {
 	newOrderBook := orderbook.Base{
 		Pair:            p,
-		Asset:           asset.USDTMarginedFutures,
+		Asset:           asset.Spot,
 		Exchange:        b.Name,
 		LastUpdateID:    orderbookNew.LastUpdateID,
 		VerifyOrderbook: b.CanVerifyOrderbook,
@@ -439,17 +446,17 @@ func (b *Binance) SeedLocalCacheWithBookUFutures(p currency.Pair, orderbookNew *
 			Price:  orderbookNew.Asks[i].Price,
 		}
 	}
-	return b.WebsocketUFuture.Orderbook.LoadSnapshot(&newOrderBook)
+	return b.Websocket.Orderbook.LoadSnapshot(&newOrderBook)
 }
 
 // UpdateLocalBuffer updates and returns the most recent iteration of the orderbook
-func (b *Binance) UpdateLocalBufferUFutures(wsdp *WebsocketDepthStream) (bool, error) {
-	enabledPairs, err := b.GetEnabledPairs(asset.USDTMarginedFutures)
+func (b *Binance) UpdateLocalBuffer(wsdp *WebsocketDepthStream) (bool, error) {
+	enabledPairs, err := b.GetEnabledPairs(asset.Spot)
 	if err != nil {
 		return false, err
 	}
 
-	format, err := b.GetPairFormat(asset.USDTMarginedFutures, true)
+	format, err := b.GetPairFormat(asset.Spot, true)
 	if err != nil {
 		return false, err
 	}
@@ -461,16 +468,16 @@ func (b *Binance) UpdateLocalBufferUFutures(wsdp *WebsocketDepthStream) (bool, e
 		return false, err
 	}
 
-	err = b.obm.stageWsUpdateUFutures(wsdp, currencyPair, asset.USDTMarginedFutures)
+	err = b.obm.stageWsUpdate(wsdp, currencyPair, asset.Spot)
 	if err != nil {
-		init, err2 := b.obm.checkIsInitialSync(currencyPair, asset.USDTMarginedFutures)
+		init, err2 := b.obm.checkIsInitialSync(currencyPair, asset.Spot)
 		if err2 != nil {
 			return false, err2
 		}
 		return init, err
 	}
 
-	err = b.applyBufferUpdateUFutures(currencyPair)
+	err = b.applyBufferUpdate(currencyPair)
 	if err != nil {
 		b.flushAndCleanup(currencyPair)
 	}
@@ -478,13 +485,13 @@ func (b *Binance) UpdateLocalBufferUFutures(wsdp *WebsocketDepthStream) (bool, e
 	return false, err
 }
 
-func (b *Binance) GenerateSubscriptionsUFutures() ([]stream.ChannelSubscription, error) {
-	// For now only depth stream is implemented
+// GenerateSubscriptions generates the default subscription set
+func (b *Binance) GenerateSubscriptions() ([]stream.ChannelSubscription, error) {
 	var channels = []string{"@ticker", "@trade", "@kline_1m", "@depth@100ms"}
 	var subscriptions []stream.ChannelSubscription
 	assets := b.GetAssetTypes(true)
 	for x := range assets {
-		if assets[x] == asset.USDTMarginedFutures {
+		if assets[x] == asset.Spot {
 			pairs, err := b.GetEnabledPairs(assets[x])
 			if err != nil {
 				return nil, err
@@ -507,14 +514,14 @@ func (b *Binance) GenerateSubscriptionsUFutures() ([]stream.ChannelSubscription,
 }
 
 // Subscribe subscribes to a set of channels
-func (b *Binance) SubscribeUFutures(channelsToSubscribe []stream.ChannelSubscription) error {
+func (b *Binance) Subscribe(channelsToSubscribe []stream.ChannelSubscription) error {
 	payload := WsPayload{
 		Method: "SUBSCRIBE",
 	}
 	for i := range channelsToSubscribe {
 		payload.Params = append(payload.Params, channelsToSubscribe[i].Channel)
 		if i%50 == 0 && i != 0 {
-			err := b.WebsocketUFuture.Conn.SendJSONMessage(payload)
+			err := b.Websocket.Conn.SendJSONMessage(payload)
 			if err != nil {
 				return err
 			}
@@ -522,24 +529,24 @@ func (b *Binance) SubscribeUFutures(channelsToSubscribe []stream.ChannelSubscrip
 		}
 	}
 	if len(payload.Params) > 0 {
-		err := b.WebsocketUFuture.Conn.SendJSONMessage(payload)
+		err := b.Websocket.Conn.SendJSONMessage(payload)
 		if err != nil {
 			return err
 		}
 	}
-	b.WebsocketUFuture.AddSuccessfulSubscriptions(channelsToSubscribe...)
+	b.Websocket.AddSuccessfulSubscriptions(channelsToSubscribe...)
 	return nil
 }
 
 // Unsubscribe unsubscribes from a set of channels
-func (b *Binance) UnsubscribeUFutures(channelsToUnsubscribe []stream.ChannelSubscription) error {
+func (b *Binance) Unsubscribe(channelsToUnsubscribe []stream.ChannelSubscription) error {
 	payload := WsPayload{
 		Method: "UNSUBSCRIBE",
 	}
 	for i := range channelsToUnsubscribe {
 		payload.Params = append(payload.Params, channelsToUnsubscribe[i].Channel)
 		if i%50 == 0 && i != 0 {
-			err := b.WebsocketUFuture.Conn.SendJSONMessage(payload)
+			err := b.Websocket.Conn.SendJSONMessage(payload)
 			if err != nil {
 				return err
 			}
@@ -547,17 +554,17 @@ func (b *Binance) UnsubscribeUFutures(channelsToUnsubscribe []stream.ChannelSubs
 		}
 	}
 	if len(payload.Params) > 0 {
-		err := b.WebsocketUFuture.Conn.SendJSONMessage(payload)
+		err := b.Websocket.Conn.SendJSONMessage(payload)
 		if err != nil {
 			return err
 		}
 	}
-	b.WebsocketUFuture.RemoveSuccessfulUnsubscriptions(channelsToUnsubscribe...)
+	b.Websocket.RemoveSuccessfulUnsubscriptions(channelsToUnsubscribe...)
 	return nil
 }
 
 // ProcessUpdate processes the websocket orderbook update
-func (b *Binance) ProcessUpdateUFutures(cp currency.Pair, a asset.Item, ws *WebsocketDepthStream) error {
+func (b *Binance) ProcessUpdate(cp currency.Pair, a asset.Item, ws *WebsocketDepthStream) error {
 	updateBid := make([]orderbook.Item, len(ws.UpdateBids))
 	for i := range ws.UpdateBids {
 		price, ok := ws.UpdateBids[i][0].(string)
@@ -600,7 +607,7 @@ func (b *Binance) ProcessUpdateUFutures(cp currency.Pair, a asset.Item, ws *Webs
 		updateAsk[i] = orderbook.Item{Price: p, Amount: a}
 	}
 
-	return b.WebsocketUFuture.Orderbook.Update(&orderbook.Update{
+	return b.Websocket.Orderbook.Update(&orderbook.Update{
 		Bids:       updateBid,
 		Asks:       updateAsk,
 		Pair:       cp,
@@ -610,8 +617,10 @@ func (b *Binance) ProcessUpdateUFutures(cp currency.Pair, a asset.Item, ws *Webs
 	})
 }
 
-func (b *Binance) applyBufferUpdateUFutures(pair currency.Pair) error {
-	fetching, needsFetching, err := b.obm.handleFetchingBook(pair, asset.USDTMarginedFutures)
+// applyBufferUpdate applies the buffer to the orderbook or initiates a new
+// orderbook sync by the REST protocol which is off handed to go routine.
+func (b *Binance) applyBufferUpdate(pair currency.Pair) error {
+	fetching, needsFetching, err := b.obm.handleFetchingBook(pair, asset.Spot)
 	if err != nil {
 		return err
 	}
@@ -622,10 +631,10 @@ func (b *Binance) applyBufferUpdateUFutures(pair currency.Pair) error {
 		if b.Verbose {
 			log.Debugf(log.WebsocketMgr, "%s Orderbook: Fetching via REST\n", b.Name)
 		}
-		return b.obm.fetchBookViaREST(pair, asset.USDTMarginedFutures)
+		return b.obm.fetchBookViaREST(pair, asset.Spot)
 	}
 
-	recent, err := b.WebsocketUFuture.Orderbook.GetOrderbook(pair, asset.USDTMarginedFutures)
+	recent, err := b.Websocket.Orderbook.GetOrderbook(pair, asset.Spot)
 	if err != nil {
 		log.Errorf(
 			log.WebsocketMgr,
@@ -635,14 +644,14 @@ func (b *Binance) applyBufferUpdateUFutures(pair currency.Pair) error {
 	}
 
 	if recent != nil {
-		err = b.obm.checkAndProcessUpdateUFutures(b.ProcessUpdateUFutures, pair, recent)
+		err = b.obm.checkAndProcessUpdate(b.ProcessUpdate, pair, recent)
 		if err != nil {
 			log.Errorf(
 				log.WebsocketMgr,
 				"%s error processing update - initiating new orderbook sync via REST: %s\n",
 				b.Name,
 				err)
-			err = b.obm.setNeedsFetchingBook(pair, asset.USDTMarginedFutures)
+			err = b.obm.setNeedsFetchingBook(pair, asset.Spot)
 			if err != nil {
 				return err
 			}
@@ -653,38 +662,38 @@ func (b *Binance) applyBufferUpdateUFutures(pair currency.Pair) error {
 }
 
 // processJob fetches and processes orderbook updates
-func (b *Binance) processJobUFutures(p currency.Pair) error {
-	err := b.SeedLocalCacheUFutures(context.TODO(), p)
+func (b *Binance) processJob(p currency.Pair) error {
+	err := b.SeedLocalCache(context.TODO(), p)
 	if err != nil {
 		return fmt.Errorf("%s %s seeding local cache for orderbook error: %v",
-			p, asset.USDTMarginedFutures, err)
+			p, asset.Spot, err)
 	}
 
-	err = b.obm.stopFetchingBook(p, asset.USDTMarginedFutures)
+	err = b.obm.stopFetchingBook(p, asset.Spot)
 	if err != nil {
 		return err
 	}
 
 	// Immediately apply the buffer updates so we don't wait for a
 	// new update to initiate this.
-	err = b.applyBufferUpdateUFutures(p)
+	err = b.applyBufferUpdate(p)
 	if err != nil {
-		b.flushAndCleanupUFutures(p)
+		b.flushAndCleanup(p)
 		return err
 	}
 	return nil
 }
 
 // flushAndCleanup flushes orderbook and clean local cache
-func (b *Binance) flushAndCleanupUFutures(p currency.Pair) {
-	errClean := b.WebsocketUFuture.Orderbook.FlushOrderbook(p, asset.USDTMarginedFutures)
+func (b *Binance) flushAndCleanup(p currency.Pair) {
+	errClean := b.Websocket.Orderbook.FlushOrderbook(p, asset.Spot)
 	if errClean != nil {
 		log.Errorf(log.WebsocketMgr,
 			"%s flushing websocket error: %v",
 			b.Name,
 			errClean)
 	}
-	errClean = b.obm.cleanup(p, asset.USDTMarginedFutures)
+	errClean = b.obm.cleanup(p, asset.Spot)
 	if errClean != nil {
 		log.Errorf(log.WebsocketMgr, "%s cleanup websocket error: %v",
 			b.Name,
@@ -692,7 +701,9 @@ func (b *Binance) flushAndCleanupUFutures(p currency.Pair) {
 	}
 }
 
-func (o *orderbookManager) stageWsUpdateUFutures(u *WebsocketDepthStream, pair currency.Pair, a asset.Item) error {
+// stageWsUpdate stages websocket update to roll through updates that need to
+// be applied to a fetched orderbook via REST.
+func (o *orderbookManager) stageWsUpdate(u *WebsocketDepthStream, pair currency.Pair, a asset.Item) error {
 	o.Lock()
 	defer o.Unlock()
 	m1, ok := o.state[pair.Base]
@@ -720,19 +731,16 @@ func (o *orderbookManager) stageWsUpdateUFutures(u *WebsocketDepthStream, pair c
 		m2[a] = state
 	}
 
-	if state.lastUpdateID != 0 && u.LastUpdateIDPrevStream != state.lastUpdateID {
-		// While listening to the stream, each new event's U should have
-		// pu equal to the previous event's u.
-		fmt.Println("pu=", u.LastUpdateIDPrevStream, "lastu=", state.lastUpdateID)
-		return fmt.Errorf("PU websocket orderbook synchronisation failure for pair %s and asset %s", pair, a)
+	if state.lastUpdateID != 0 && u.FirstUpdateID != state.lastUpdateID+1 {
+		// While listening to the stream, each new event's U should be
+		// equal to the previous event's u+1.
+		return fmt.Errorf("websocket orderbook synchronisation failure for pair %s and asset %s", pair, a)
 	}
-	// fmt.Println("Setting lastUpdateID:", u.LastUpdateID)
 	state.lastUpdateID = u.LastUpdateID
 
 	select {
 	// Put update in the channel buffer to be processed
 	case state.buffer <- u:
-		// fmt.Println("stageWsUpdate put the update to buffer:", a)
 		return nil
 	default:
 		<-state.buffer    // pop one element
@@ -742,13 +750,13 @@ func (o *orderbookManager) stageWsUpdateUFutures(u *WebsocketDepthStream, pair c
 	}
 }
 
-func (o *orderbookManager) checkAndProcessUpdateUFutures(processor func(currency.Pair, asset.Item, *WebsocketDepthStream) error, pair currency.Pair, recent *orderbook.Base) error {
+func (o *orderbookManager) checkAndProcessUpdate(processor func(currency.Pair, asset.Item, *WebsocketDepthStream) error, pair currency.Pair, recent *orderbook.Base) error {
 	o.Lock()
 	defer o.Unlock()
-	state, ok := o.state[pair.Base][pair.Quote][asset.USDTMarginedFutures]
+	state, ok := o.state[pair.Base][pair.Quote][asset.Spot]
 	if !ok {
 		return fmt.Errorf("could not match pair [%s] asset type [%s] in hash table to process websocket orderbook update",
-			pair, asset.USDTMarginedFutures)
+			pair, asset.Spot)
 	}
 
 	// This will continuously remove updates from the buffered channel and
@@ -757,15 +765,15 @@ buffer:
 	for {
 		select {
 		case d := <-state.buffer:
-			process, err := state.validateUFutures(d, recent)
+			process, err := state.validate(d, recent)
 			if err != nil {
 				return err
 			}
 			if process {
-				err := processor(pair, asset.USDTMarginedFutures, d)
+				err := processor(pair, asset.Spot, d)
 				if err != nil {
 					return fmt.Errorf("%s %s processing update error: %w",
-						pair, asset.USDTMarginedFutures, err)
+						pair, asset.Spot, err)
 				}
 			}
 		default:
@@ -775,26 +783,23 @@ buffer:
 	return nil
 }
 
-func (u *update) validateUFutures(updt *WebsocketDepthStream, recent *orderbook.Base) (bool, error) {
-	// https://binance-docs.github.io/apidocs/futures/en/#how-to-manage-a-local-order-book-correctly
-	if updt.LastUpdateID < recent.LastUpdateID {
-		// Drop any event where u is < lastUpdateId in the snapshot.
+// validate checks for correct update alignment
+func (u *update) validate(updt *WebsocketDepthStream, recent *orderbook.Base) (bool, error) {
+	if updt.LastUpdateID <= recent.LastUpdateID {
+		// Drop any event where u is <= lastUpdateId in the snapshot.
 		return false, nil
 	}
-	id := recent.LastUpdateID
+
+	id := recent.LastUpdateID + 1
 	if u.initialSync {
-		// The first processed event should have U <= lastUpdateId AND u >= lastUpdateId.
+		// The first processed event should have U <= lastUpdateId+1 AND
+		// u >= lastUpdateId+1.
 		if updt.FirstUpdateID > id || updt.LastUpdateID < id {
 			return false, fmt.Errorf("initial websocket orderbook sync failure for pair %s and asset %s",
 				recent.Pair,
-				asset.USDTMarginedFutures)
+				asset.Spot)
 		}
 		u.initialSync = false
-	} else if recent.LastUpdateID != updt.LastUpdateIDPrevStream {
-		// While listening to the stream, each new event's pu should be equal to the previous event's u,
-		// otherwise initialize the process from step 3.
-		// Raise an error rather than returning false, so that the OrderBook is fetched again
-		return false, errors.New("uFuturesValidate: event pu is not equal to previous event's u")
 	}
 	return true, nil
 }

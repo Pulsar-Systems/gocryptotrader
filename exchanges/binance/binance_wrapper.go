@@ -265,6 +265,32 @@ func (b *Binance) SetupSpot(exch *config.Exchange) error {
 	})
 }
 
+func (b *Binance) SetupUFuture(exch *config.Exchange) error {
+	err := b.WebsocketUFuture.Setup(&stream.WebsocketSetup{
+		ExchangeConfig:        exch,
+		DefaultURL:            binanceUFuturesDefaultWebsocketURL,
+		RunningURL:            binanceUFuturesDefaultWebsocketURL,
+		Connector:             b.WsConnectUFutures,
+		Subscriber:            b.SubscribeUFutures,
+		Unsubscriber:          b.UnsubscribeUFutures,
+		GenerateSubscriptions: b.GenerateSubscriptionsUFutures,
+		Features:              &b.Features.Supports.WebsocketCapabilities,
+		OrderbookBufferConfig: buffer.Config{
+			SortBuffer:            true,
+			SortBufferByUpdateIDs: true,
+		},
+		TradeFeed: b.Features.Enabled.TradeFeed,
+	})
+	if err != nil {
+		return err
+	}
+	return b.WebsocketUFuture.SetupNewConnection(stream.ConnectionSetup{
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		RateLimit:            wsRateLimitMilliseconds,
+	})
+}
+
 // Start starts the Binance go routine
 func (b *Binance) Start(wg *sync.WaitGroup) error {
 	if wg == nil {
