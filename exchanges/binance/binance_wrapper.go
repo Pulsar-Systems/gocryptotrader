@@ -1134,12 +1134,12 @@ func (b *Binance) CancelOrder(ctx context.Context, o *order.Cancel) error {
 			return err
 		}
 	case asset.CoinMarginedFutures:
-		_, err := b.FuturesCancelOrder(ctx, o.Pair, o.OrderID, "")
+		_, err := b.FuturesCancelOrder(ctx, o.Pair, o.OrderID, o.AccountID)
 		if err != nil {
 			return err
 		}
 	case asset.USDTMarginedFutures:
-		_, err := b.UCancelOrder(ctx, o.Pair, o.OrderID, "")
+		_, err := b.UCancelOrder(ctx, o.Pair, o.OrderID, o.AccountID)
 		if err != nil {
 			return err
 		}
@@ -1412,7 +1412,7 @@ func (b *Binance) GetActiveOrders(ctx context.Context, req *order.GetOrdersReque
 				if err != nil {
 					log.Errorf(log.ExchangeSys, "%s %v", b.Name, err)
 				}
-				orderStatus, err := order.StringToOrderStatus(resp[i].Status)
+				orderStatus, err := order.StringToOrderStatus(resp[x].Status)
 				if err != nil {
 					log.Errorf(log.ExchangeSys, "%s %v", b.Name, err)
 				}
@@ -1534,7 +1534,7 @@ func (b *Binance) GetOrderHistory(ctx context.Context, req *order.GetOrdersReque
 
 			for i := range resp {
 				var side order.Side
-				side, err = order.StringToOrderSide(resp[x].Side)
+				side, err = order.StringToOrderSide(resp[i].Side)
 				if err != nil {
 					log.Errorf(log.ExchangeSys, "%s %v", b.Name, err)
 				}
