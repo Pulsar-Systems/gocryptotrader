@@ -295,6 +295,7 @@ func (by *Bybit) CreateUSDTFuturesOrder(ctx context.Context, symbol currency.Pai
 	} else {
 		params.Set("reduce_only", "false")
 	}
+	params.Set("position_idx", "0")
 	return resp.Data, by.SendAuthHTTPRequest(ctx, exchange.RestUSDTMargined, http.MethodPost, ufuturesCreateOrder, params, nil, &resp, uFuturesCreateOrderRate)
 }
 

@@ -921,6 +921,9 @@ func (by *Bybit) SubmitOrder(ctx context.Context, s *order.Submit) (*order.Submi
 			timeInForce = ""
 			requestParamsOrderType = BybitRequestParamsOrderMarket
 		case order.Limit:
+			if s.ImmediateOrCancel {
+				timeInForce = BybitRequestParamsTimeIOC
+			}
 			requestParamsOrderType = BybitRequestParamsOrderLimit
 		default:
 			return nil, errUnsupportedOrderType
@@ -952,6 +955,9 @@ func (by *Bybit) SubmitOrder(ctx context.Context, s *order.Submit) (*order.Submi
 			timeInForce = ""
 			oType = "Market"
 		case order.Limit:
+			if s.ImmediateOrCancel {
+				timeInForce = BybitRequestParamsTimeIOC
+			}
 			oType = "Limit"
 		default:
 			return nil, errUnsupportedOrderType
@@ -972,6 +978,9 @@ func (by *Bybit) SubmitOrder(ctx context.Context, s *order.Submit) (*order.Submi
 			timeInForce = ""
 			oType = "Market"
 		case order.Limit:
+			if s.ImmediateOrCancel {
+				timeInForce = BybitRequestParamsTimeIOC
+			}
 			oType = "Limit"
 		default:
 			return nil, errUnsupportedOrderType
@@ -992,6 +1001,9 @@ func (by *Bybit) SubmitOrder(ctx context.Context, s *order.Submit) (*order.Submi
 			timeInForce = ""
 			oType = "Market"
 		case order.Limit:
+			if s.ImmediateOrCancel {
+				timeInForce = BybitRequestParamsTimeIOC
+			}
 			oType = "Limit"
 		default:
 			return nil, errUnsupportedOrderType
@@ -1012,6 +1024,9 @@ func (by *Bybit) SubmitOrder(ctx context.Context, s *order.Submit) (*order.Submi
 			timeInForce = ""
 			oType = "Market"
 		case order.Limit:
+			if s.ImmediateOrCancel {
+				timeInForce = BybitRequestParamsTimeIOC
+			}
 			oType = "Limit"
 		default:
 			return nil, errUnsupportedOrderType
