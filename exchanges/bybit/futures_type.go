@@ -245,10 +245,10 @@ type FuturesActiveRealtimeOrder struct {
 	LastExecutionTime  string                 `json:"last_exec_time"`
 	LastExecutionPrice float64                `json:"last_exec_price"`
 	LeavesQty          float64                `json:"leaves_qty"`
-	LeaveValue         float64                `json:"leaves_value,string"`
-	CumulativeQty      float64                `json:"cum_exec_qty,string"`
-	CumulativeValue    float64                `json:"cum_exec_value,string"`
-	CumulativeFee      float64                `json:"cum_exec_fee,string"`
+	LeaveValue         float64                `json:"leaves_value"`
+	CumulativeQty      float64                `json:"cum_exec_qty"`
+	CumulativeValue    float64                `json:"cum_exec_value"`
+	CumulativeFee      float64                `json:"cum_exec_fee"`
 	RejectReason       string                 `json:"reject_reason"`
 	CancelType         string                 `json:"cancel_type"`
 	CreatedAt          time.Time              `json:"create_at"`
