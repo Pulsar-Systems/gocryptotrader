@@ -86,7 +86,21 @@ func (h *HUOBI) SetDefaults() {
 			Delimiter: currency.DashDelimiter,
 		},
 	}
+	usdtFutures := currency.PairStore{
+		RequestFormat: &currency.PairFormat{
+			Uppercase: true,
+			Delimiter: currency.DashDelimiter,
+		},
+		ConfigFormat: &currency.PairFormat{
+			Uppercase: true,
+			Delimiter: currency.DashDelimiter,
+		},
+	}
 	err := h.StoreAssetPairFormat(asset.Spot, fmt1)
+	if err != nil {
+		log.Errorln(log.ExchangeSys, err)
+	}
+	err = h.StoreAssetPairFormat(asset.USDTMarginedFutures, usdtFutures)
 	if err != nil {
 		log.Errorln(log.ExchangeSys, err)
 	}
@@ -178,6 +192,7 @@ func (h *HUOBI) SetDefaults() {
 		log.Errorln(log.ExchangeSys, err)
 	}
 	h.Websocket = stream.New()
+	h.WebsocketUFutures = stream.New()
 	h.WebsocketResponseMaxLimit = exchange.DefaultWebsocketResponseMaxLimit
 	h.WebsocketResponseCheckTimeout = exchange.DefaultWebsocketResponseCheckTimeout
 	h.WebsocketOrderbookBufferLimit = exchange.DefaultWebsocketOrderbookBufferLimit
@@ -198,6 +213,14 @@ func (h *HUOBI) Setup(exch *config.Exchange) error {
 		return err
 	}
 
+	err = h.SetupSpot(exch)
+	if err != nil {
+		return err
+	}
+	return h.SetupUFutures(exch)
+}
+
+func (h *HUOBI) SetupSpot(exch *config.Exchange) error {
 	wsRunningURL, err := h.API.Endpoints.GetURL(exchange.WebsocketSpot)
 	if err != nil {
 		return err
@@ -232,6 +255,29 @@ func (h *HUOBI) Setup(exch *config.Exchange) error {
 		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
 		URL:                  wsAccountsOrdersURL,
 		Authenticated:        true,
+	})
+}
+
+func (h *HUOBI) SetupUFutures(exch *config.Exchange) error {
+	err := h.WebsocketUFutures.Setup(&stream.WebsocketSetup{
+		ExchangeConfig:        exch,
+		DefaultURL:            futuresWSMarketURL,
+		RunningURL:            futuresWSMarketURL,
+		Connector:             h.WsConnectUFutures,
+		Subscriber:            h.SubscribeUFutures,
+		Unsubscriber:          h.UnsubscribeUFutures,
+		GenerateSubscriptions: h.GenerateDefaultSubscriptionsUFutures,
+		Features:              &h.Features.Supports.WebsocketCapabilities,
+	})
+	h.WebsocketUFutures.SetCanUseAuthenticatedEndpoints(false)
+	if err != nil {
+		return err
+	}
+
+	return h.WebsocketUFutures.SetupNewConnection(stream.ConnectionSetup{
+		RateLimit:            rateLimit,
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
 	})
 }
 

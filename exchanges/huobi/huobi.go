@@ -18,6 +18,7 @@ import (
 	exchange "github.com/thrasher-corp/gocryptotrader/exchanges"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
 )
 
 const (
@@ -70,7 +71,8 @@ const (
 // HUOBI is the overarching type across this package
 type HUOBI struct {
 	exchange.Base
-	AccountID string
+	AccountID         string
+	WebsocketUFutures *stream.Websocket
 }
 
 // GetMarginRates gets margin rates
