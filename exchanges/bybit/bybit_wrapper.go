@@ -1088,7 +1088,7 @@ func (by *Bybit) ModifyOrder(ctx context.Context, action *order.Modify) (*order.
 
 // CancelOrder cancels an order by its corresponding ID number
 func (by *Bybit) CancelOrder(ctx context.Context, ord *order.Cancel) error {
-	if err := ord.Validate(ord.StandardCancel()); err != nil {
+	if err := ord.Validate(); err != nil {
 		return err
 	}
 
