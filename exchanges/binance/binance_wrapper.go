@@ -1117,7 +1117,7 @@ func (b *Binance) ModifyOrder(_ context.Context, _ *order.Modify) (*order.Modify
 
 // CancelOrder cancels an order by its corresponding ID number
 func (b *Binance) CancelOrder(ctx context.Context, o *order.Cancel) error {
-	if err := o.Validate(o.StandardCancel()); err != nil {
+	if err := o.Validate(); err != nil {
 		return err
 	}
 	switch o.AssetType {
