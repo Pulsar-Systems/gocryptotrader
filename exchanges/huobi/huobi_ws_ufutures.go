@@ -26,6 +26,8 @@ const (
 	futuresWSURL = "wss://api.hbdm.com/"
 
 	futuresWSMarketURL = futuresWSURL + "linear-swap-ws"
+
+	futuresWSIncrementalStream = "market.%v.depth.size_150.high_freq"
 )
 
 var commsF = make(chan WsMessage)
@@ -229,6 +231,7 @@ func (h *HUOBI) sendPingResponseUFutures(pong int64) {
 }
 
 // WsProcessOrderbook processes new orderbook data
+// IMPORTANT: In Huobi the Orderbook Entry sizes are in terms of contract amounts not the underlying asset amount
 func (h *HUOBI) WsProcessOrderbookUFutures(update *WsDepth, symbol string) error {
 	pairs, err := h.GetEnabledPairs(asset.USDTMarginedFutures)
 	if err != nil {
@@ -259,7 +262,7 @@ func (h *HUOBI) WsProcessOrderbookUFutures(update *WsDepth, symbol string) error
 		}
 		bids[i] = orderbook.Item{
 			Price:  price,
-			Amount: amount / 1000,
+			Amount: amount,
 		}
 	}
 
@@ -275,7 +278,7 @@ func (h *HUOBI) WsProcessOrderbookUFutures(update *WsDepth, symbol string) error
 		}
 		asks[i] = orderbook.Item{
 			Price:  price,
-			Amount: amount / 1000,
+			Amount: amount,
 		}
 	}
 
@@ -293,7 +296,7 @@ func (h *HUOBI) WsProcessOrderbookUFutures(update *WsDepth, symbol string) error
 // GenerateDefaultSubscriptions Adds default subscriptions to websocket to be handled by ManageSubscriptions()
 func (h *HUOBI) GenerateDefaultSubscriptionsUFutures() ([]stream.ChannelSubscription, error) {
 	var channels = []string{wsMarketKline,
-		wsMarketDepth,
+		futuresWSIncrementalStream,
 		wsMarketTrade}
 	var subscriptions []stream.ChannelSubscription
 	enabledCurrencies, err := h.GetEnabledPairs(asset.USDTMarginedFutures)

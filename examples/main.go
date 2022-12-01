@@ -35,18 +35,18 @@ func main() {
 		fmt.Println("b.Setup ", err)
 	}
 
-	err = h.Websocket.Connect()
-	if err != nil {
-		fmt.Println("h.Websocket.Connect ", err)
-		return
-	}
+	// err = h.Websocket.Connect()
+	// if err != nil {
+	// 	fmt.Println("h.Websocket.Connect ", err)
+	// 	return
+	// }
 	err = h.WebsocketUFutures.Connect()
 	if err != nil {
 		fmt.Println("h.WebsocketUFutures.Connect ", err)
 	}
 	p := currency.Pair{
 		Quote:     currency.USDT,
-		Base:      currency.BTC,
+		Base:      currency.ETH,
 		Delimiter: "-",
 	}
 	t := time.NewTicker(time.Second * 1)
