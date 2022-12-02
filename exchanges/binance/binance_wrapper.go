@@ -234,6 +234,7 @@ func (b *Binance) Setup(exch *config.Exchange) error {
 	return b.SetupUFuture(exch)
 }
 
+// SetupSpot takes in the supplied exchange configuration details and sets Spot websocket params
 func (b *Binance) SetupSpot(exch *config.Exchange) error {
 	ePoint, err := b.API.Endpoints.GetURL(exchange.WebsocketSpot)
 	if err != nil {
@@ -265,6 +266,7 @@ func (b *Binance) SetupSpot(exch *config.Exchange) error {
 	})
 }
 
+// SetupUFuture takes in the supplied exchange configuration details and sets UFutures websocket params
 func (b *Binance) SetupUFuture(exch *config.Exchange) error {
 	err := b.WebsocketUFuture.Setup(&stream.WebsocketSetup{
 		ExchangeConfig:        exch,
@@ -316,15 +318,15 @@ func (b *Binance) Run() {
 	}
 
 	forceUpdate := false
-	a := b.GetAssetTypes(true)
-	for x := range a {
-		if err := b.UpdateOrderExecutionLimits(context.TODO(), a[x]); err != nil {
+	assets := b.GetAssetTypes(true)
+	for x := range assets {
+		if err := b.UpdateOrderExecutionLimits(context.TODO(), assets[x]); err != nil {
 			log.Errorf(log.ExchangeSys,
 				"%s failed to set exchange order execution limits. Err: %v",
 				b.Name,
 				err)
 		}
-		if a[x] == asset.USDTMarginedFutures && !b.BypassConfigFormatUpgrades {
+		if assets[x] == asset.USDTMarginedFutures && !b.BypassConfigFormatUpgrades {
 			format, err := b.GetPairFormat(asset.USDTMarginedFutures, false)
 			if err != nil {
 				log.Errorf(log.ExchangeSys, "%s failed to get enabled currencies. Err %s\n",
@@ -359,9 +361,9 @@ func (b *Binance) Run() {
 						b.Name,
 						err)
 				} else {
-					log.Warnf(log.ExchangeSys, exchange.ResetConfigPairsWarningMessage, b.Name, a[x], enabledPairs)
+					log.Warnf(log.ExchangeSys, exchange.ResetConfigPairsWarningMessage, b.Name, assets[x], enabledPairs)
 					forceUpdate = true
-					err = b.UpdatePairs(enabledPairs, a[x], true, true)
+					err = b.UpdatePairs(enabledPairs, assets[x], true, true)
 					if err != nil {
 						log.Errorf(log.ExchangeSys,
 							"%s failed to update currencies. Err: %s\n",
@@ -1124,29 +1126,22 @@ func (b *Binance) ModifyOrder(_ context.Context, _ *order.Modify) (*order.Modify
 
 // CancelOrder cancels an order by its corresponding ID number
 func (b *Binance) CancelOrder(ctx context.Context, o *order.Cancel) error {
-	if err := o.Validate(o.StandardCancel()); err != nil {
+	if err := o.Validate(); err != nil {
 		return err
 	}
 	switch o.AssetType {
 	case asset.Spot, asset.Margin:
-		orderIDInt, err := strconv.ParseInt(o.OrderID, 10, 64)
-		if err != nil {
-			return err
-		}
-		_, err = b.CancelExistingOrder(ctx,
-			o.Pair,
-			orderIDInt,
-			o.AccountID)
+		_, err := b.CancelExistingOrder(ctx, o.Pair, o.OrderID, o.ClientOrderID)
 		if err != nil {
 			return err
 		}
 	case asset.CoinMarginedFutures:
-		_, err := b.FuturesCancelOrder(ctx, o.Pair, o.OrderID, "")
+		_, err := b.FuturesCancelOrder(ctx, o.Pair, o.OrderID, o.ClientOrderID)
 		if err != nil {
 			return err
 		}
 	case asset.USDTMarginedFutures:
-		_, err := b.UCancelOrder(ctx, o.Pair, o.OrderID, "")
+		_, err := b.UCancelOrder(ctx, o.Pair, o.OrderID, o.ClientOrderID)
 		if err != nil {
 			return err
 		}
@@ -1173,12 +1168,13 @@ func (b *Binance) CancelAllOrders(ctx context.Context, req *order.Cancel) (order
 			return cancelAllOrdersResponse, err
 		}
 		for i := range openOrders {
+			strOrderID := strconv.FormatInt(openOrders[i].OrderID, 10)
 			_, err = b.CancelExistingOrder(ctx,
 				req.Pair,
-				openOrders[i].OrderID,
+				strOrderID
 				"")
 			if err != nil {
-				cancelAllOrdersResponse.Status[strconv.FormatInt(openOrders[i].OrderID, 10)] = err.Error()
+				cancelAllOrdersResponse.Status[strOrderID] = err.Error()
 			}
 		}
 	case asset.CoinMarginedFutures:
@@ -1893,8 +1889,7 @@ func (b *Binance) UpdateOrderExecutionLimits(ctx context.Context, a asset.Item) 
 	return b.LoadLimits(limits)
 }
 
-// GetAvailableTransferChains returns the available transfer blockchains for the specific
-// cryptocurrency
+// GetAvailableTransferChains returns the available transfer blockchains for the specific cryptocurrency
 func (b *Binance) GetAvailableTransferChains(ctx context.Context, cryptocurrency currency.Code) ([]string, error) {
 	coinInfo, err := b.GetAllCoinsInfo(ctx)
 	if err != nil {
