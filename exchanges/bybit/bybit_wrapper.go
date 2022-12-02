@@ -423,15 +423,6 @@ func (by *Bybit) UpdateTickers(ctx context.Context, assetType asset.Item) error 
 				if err != nil {
 					return err
 				}
-				var openValue float64
-				if tick[y].OpenValue == "" {
-					openValue = 0 // TODO: return?
-				} else {
-					openValue, err = strconv.ParseFloat(tick[y].OpenValue, 64)
-					if err != nil {
-						return err
-					}
-				}
 				err = ticker.ProcessTicker(&ticker.Price{
 					Last:         tick[y].LastPrice,
 					High:         tick[y].HighPrice24h,
@@ -534,15 +525,6 @@ func (by *Bybit) UpdateTicker(ctx context.Context, p currency.Pair, assetType as
 			cp, err := by.extractCurrencyPair(tick[y].Symbol, assetType)
 			if err != nil {
 				return nil, err
-			}
-			var openValue float64
-			if tick[y].OpenValue == "" {
-				openValue = 0 // TODO: return?
-			} else {
-				openValue, err = strconv.ParseFloat(tick[y].OpenValue, 64)
-				if err != nil {
-					return nil, err
-				}
 			}
 			err = ticker.ProcessTicker(&ticker.Price{
 				Last:         tick[y].LastPrice,
