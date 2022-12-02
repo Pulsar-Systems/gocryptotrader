@@ -19,12 +19,14 @@ import (
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
 	"github.com/thrasher-corp/gocryptotrader/log"
 )
 
 // Binance is the overarching type across the Binance package
 type Binance struct {
 	exchange.Base
+	WebsocketUFuture *stream.Websocket
 	// Valid string list that is required by the exchange
 	validLimits []int
 	obm         *orderbookManager
@@ -581,7 +583,7 @@ func (b *Binance) newOrder(ctx context.Context, api string, o *NewOrderRequest, 
 }
 
 // CancelExistingOrder sends a cancel order to Binance
-func (b *Binance) CancelExistingOrder(ctx context.Context, symbol currency.Pair, orderID int64, origClientOrderID string) (CancelOrderResponse, error) {
+func (b *Binance) CancelExistingOrder(ctx context.Context, symbol currency.Pair, orderID, origClientOrderID string) (CancelOrderResponse, error) {
 	var resp CancelOrderResponse
 
 	symbolValue, err := b.FormatSymbol(symbol, asset.Spot)
@@ -591,8 +593,8 @@ func (b *Binance) CancelExistingOrder(ctx context.Context, symbol currency.Pair,
 	params := url.Values{}
 	params.Set("symbol", symbolValue)
 
-	if orderID != 0 {
-		params.Set("orderId", strconv.FormatInt(orderID, 10))
+	if orderID != "" {
+		params.Set("orderId", orderID)
 	}
 
 	if origClientOrderID != "" {
