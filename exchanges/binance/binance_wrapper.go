@@ -1159,12 +1159,13 @@ func (b *Binance) CancelAllOrders(ctx context.Context, req *order.Cancel) (order
 			return cancelAllOrdersResponse, err
 		}
 		for i := range openOrders {
+			strOrderID := strconv.FormatInt(openOrders[i].OrderID, 10)
 			_, err = b.CancelExistingOrder(ctx,
 				req.Pair,
-				openOrders[i].OrderID,
+				strOrderID,
 				"")
 			if err != nil {
-				cancelAllOrdersResponse.Status[strconv.FormatInt(openOrders[i].OrderID, 10)] = err.Error()
+				cancelAllOrdersResponse.Status[strOrderID] = err.Error()
 			}
 		}
 	case asset.CoinMarginedFutures:
