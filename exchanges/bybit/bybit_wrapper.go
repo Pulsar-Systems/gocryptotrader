@@ -423,15 +423,6 @@ func (by *Bybit) UpdateTickers(ctx context.Context, assetType asset.Item) error 
 				if err != nil {
 					return err
 				}
-				var openValue float64
-				if tick[y].OpenValue == "" {
-					openValue = 0 // TODO: return?
-				} else {
-					openValue, err = strconv.ParseFloat(tick[y].OpenValue, 64)
-					if err != nil {
-						return err
-					}
-				}
 				err = ticker.ProcessTicker(&ticker.Price{
 					Last:         tick[y].LastPrice,
 					High:         tick[y].HighPrice24h,
@@ -439,7 +430,7 @@ func (by *Bybit) UpdateTickers(ctx context.Context, assetType asset.Item) error 
 					Bid:          tick[y].BidPrice,
 					Ask:          tick[y].AskPrice,
 					Volume:       tick[y].Volume24h,
-					Open:         openValue,
+					Open:         tick[y].OpenValue.Float64(),
 					Pair:         cp,
 					ExchangeName: by.Name,
 					AssetType:    assetType})
@@ -535,15 +526,6 @@ func (by *Bybit) UpdateTicker(ctx context.Context, p currency.Pair, assetType as
 			if err != nil {
 				return nil, err
 			}
-			var openValue float64
-			if tick[y].OpenValue == "" {
-				openValue = 0 // TODO: return?
-			} else {
-				openValue, err = strconv.ParseFloat(tick[y].OpenValue, 64)
-				if err != nil {
-					return nil, err
-				}
-			}
 			err = ticker.ProcessTicker(&ticker.Price{
 				Last:         tick[y].LastPrice,
 				High:         tick[y].HighPrice24h,
@@ -551,7 +533,7 @@ func (by *Bybit) UpdateTicker(ctx context.Context, p currency.Pair, assetType as
 				Bid:          tick[y].BidPrice,
 				Ask:          tick[y].AskPrice,
 				Volume:       tick[y].Volume24h,
-				Open:         openValue,
+				Open:         tick[y].OpenValue.Float64(),
 				Pair:         cp,
 				ExchangeName: by.Name,
 				AssetType:    assetType})
@@ -1405,8 +1387,9 @@ func (by *Bybit) WithdrawFiatFundsToInternationalBank(ctx context.Context, withd
 }
 
 // GetActiveOrders retrieves any orders that are active/open
-func (by *Bybit) GetActiveOrders(ctx context.Context, req *order.GetOrdersRequest) ([]order.Detail, error) {
-	if err := req.Validate(); err != nil {
+func (by *Bybit) GetActiveOrders(ctx context.Context, req *order.GetOrdersRequest) (order.FilteredOrders, error) {
+	err := req.Validate()
+	if err != nil {
 		return nil, err
 	}
 
@@ -1556,20 +1539,14 @@ func (by *Bybit) GetActiveOrders(ctx context.Context, req *order.GetOrdersReques
 	default:
 		return orders, fmt.Errorf("%s %w", req.AssetType, asset.ErrNotSupported)
 	}
-	order.FilterOrdersByPairs(&orders, req.Pairs)
-	order.FilterOrdersByType(&orders, req.Type)
-	order.FilterOrdersBySide(&orders, req.Side)
-	err := order.FilterOrdersByTimeRange(&orders, req.StartTime, req.EndTime)
-	if err != nil {
-		log.Errorf(log.ExchangeSys, "%s %v", by.Name, err)
-	}
-	return orders, nil
+	return req.Filter(by.Name, orders), nil
 }
 
 // GetOrderHistory retrieves account order information
 // Can Limit response to specific order status
-func (by *Bybit) GetOrderHistory(ctx context.Context, req *order.GetOrdersRequest) ([]order.Detail, error) {
-	if err := req.Validate(); err != nil {
+func (by *Bybit) GetOrderHistory(ctx context.Context, req *order.GetOrdersRequest) (order.FilteredOrders, error) {
+	err := req.Validate()
+	if err != nil {
 		return nil, err
 	}
 	var orders []order.Detail
@@ -1734,14 +1711,7 @@ func (by *Bybit) GetOrderHistory(ctx context.Context, req *order.GetOrdersReques
 	default:
 		return orders, fmt.Errorf("%s %w", req.AssetType, asset.ErrNotSupported)
 	}
-
-	order.FilterOrdersByType(&orders, req.Type)
-	order.FilterOrdersBySide(&orders, req.Side)
-	err := order.FilterOrdersByTimeRange(&orders, req.StartTime, req.EndTime)
-	if err != nil {
-		log.Errorf(log.ExchangeSys, "%s %v", by.Name, err)
-	}
-	return orders, nil
+	return req.Filter(by.Name, orders), nil
 }
 
 // GetFeeByType returns an estimate of fee based on the type of transaction
