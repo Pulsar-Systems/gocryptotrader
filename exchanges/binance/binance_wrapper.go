@@ -1171,7 +1171,7 @@ func (b *Binance) CancelAllOrders(ctx context.Context, req *order.Cancel) (order
 			strOrderID := strconv.FormatInt(openOrders[i].OrderID, 10)
 			_, err = b.CancelExistingOrder(ctx,
 				req.Pair,
-				strOrderID
+				strOrderID,
 				"")
 			if err != nil {
 				cancelAllOrdersResponse.Status[strOrderID] = err.Error()

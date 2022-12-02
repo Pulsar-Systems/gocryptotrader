@@ -593,8 +593,8 @@ func (b *Binance) CancelExistingOrder(ctx context.Context, symbol currency.Pair,
 	params := url.Values{}
 	params.Set("symbol", symbolValue)
 
-	if orderID != 0 {
-		params.Set("orderId", strconv.FormatInt(orderID, 10))
+	if orderID != "" {
+		params.Set("orderId", orderID)
 	}
 
 	if origClientOrderID != "" {
