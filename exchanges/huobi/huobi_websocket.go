@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	baseWSURL    = "wss://api.huobi.pro"
+	baseWSURL = "wss://api.huobi.pro"
 
 	wsMarketURL    = baseWSURL + "/ws"
 	wsMarketKline  = "market.%s.kline.1min"
@@ -56,6 +56,7 @@ const (
 
 // Instantiates a communications channel between websocket connections
 var comms = make(chan WsMessage)
+var updateCountSpot = 0
 
 // WsConnect initiates a new websocket connection
 func (h *HUOBI) WsConnect() error {
