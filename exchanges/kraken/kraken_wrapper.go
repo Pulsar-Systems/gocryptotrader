@@ -189,6 +189,7 @@ func (k *Kraken) SetDefaults() {
 		log.Errorln(log.ExchangeSys, err)
 	}
 	k.Websocket = stream.New()
+	k.WebsocketUFutures = stream.New()
 	k.WebsocketResponseMaxLimit = exchange.DefaultWebsocketResponseMaxLimit
 	k.WebsocketResponseCheckTimeout = exchange.DefaultWebsocketResponseCheckTimeout
 	k.WebsocketOrderbookBufferLimit = exchange.DefaultWebsocketOrderbookBufferLimit
@@ -249,6 +250,48 @@ func (k *Kraken) Setup(exch *config.Exchange) error {
 		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
 		URL:                  krakenAuthWSURL,
 		Authenticated:        true,
+	})
+}
+
+func (k *Kraken) SetupUFutures(exch *config.Exchange) error {
+	err := exch.Validate()
+	if err != nil {
+		return err
+	}
+	if !exch.Enabled {
+		k.SetEnabled(false)
+		return nil
+	}
+	err = k.SetupDefaults(exch)
+	if err != nil {
+		return err
+	}
+
+	err = k.SeedAssets(context.TODO())
+	if err != nil {
+		return err
+	}
+
+	err = k.WebsocketUFutures.Setup(&stream.WebsocketSetup{
+		ExchangeConfig:        exch,
+		DefaultURL:            krakenUFuturesWSURL,
+		RunningURL:            krakenUFuturesWSURL,
+		Connector:             k.WsConnectUFutures,
+		Subscriber:            k.SubscribeUFutures,
+		Unsubscriber:          k.UnsubscribeUFutures,
+		GenerateSubscriptions: k.GenerateDefaultSubscriptionsUFutures,
+		Features:              &k.Features.Supports.WebsocketCapabilities,
+		OrderbookBufferConfig: buffer.Config{SortBuffer: true},
+	})
+	if err != nil {
+		return err
+	}
+
+	return k.WebsocketUFutures.SetupNewConnection(stream.ConnectionSetup{
+		RateLimit:            krakenWsRateLimit,
+		ResponseCheckTimeout: exch.WebsocketResponseCheckTimeout,
+		ResponseMaxLimit:     exch.WebsocketResponseMaxLimit,
+		URL:                  krakenUFuturesWSURL,
 	})
 }
 

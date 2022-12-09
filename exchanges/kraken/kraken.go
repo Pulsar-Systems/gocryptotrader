@@ -20,6 +20,7 @@ import (
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/order"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/request"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
 	"github.com/thrasher-corp/gocryptotrader/log"
 )
 
@@ -34,6 +35,7 @@ const (
 type Kraken struct {
 	exchange.Base
 	wsRequestMtx sync.Mutex
+	WebsocketUFutures   *stream.Websocket
 }
 
 // GetCurrentServerTime returns current server time
