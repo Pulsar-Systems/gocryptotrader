@@ -96,6 +96,11 @@ func (k *Kraken) SetDefaults() {
 		log.Errorln(log.ExchangeSys, err)
 	}
 
+	err = k.StoreAssetPairFormat(asset.USDTMarginedFutures, pairStore)
+	if err != nil {
+		log.Errorln(log.ExchangeSys, err)
+	}
+
 	err = k.DisableAssetWebsocketSupport(asset.Futures)
 	if err != nil {
 		log.Errorln(log.ExchangeSys, err)

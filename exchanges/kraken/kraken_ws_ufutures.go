@@ -23,6 +23,7 @@ const (
 
 	krakenUFuturesSubscribed = "subscribed"
 	krakenUFuturesAlert      = "alert"
+	krakenUFuturesInfo       = "info"
 )
 
 var (
@@ -122,10 +123,10 @@ func (k *Kraken) wsHandleDataUFutures(respRaw []byte) error {
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal received data, got error: %v", err)
 	}
-	// First check for events as events have a "feed" field but feeds do not
+	// First check for events as events have a "feed" field but feeds do not have an "event" field
 	if event, ok := payload["event"]; ok {
 		switch event {
-		case stream.Pong, krakenWsHeartbeat, krakenUFuturesAlert:
+		case stream.Pong, krakenWsHeartbeat, krakenUFuturesAlert, krakenUFuturesInfo:
 			return nil
 		case krakenUFuturesSubscribed:
 			var sub WsSubscribedUFutures
@@ -164,9 +165,6 @@ func (k *Kraken) wsHandleDataUFutures(respRaw []byte) error {
 			err := json.Unmarshal(respRaw, &update)
 			if err != nil {
 				return fmt.Errorf("unable to unmarshal orderbook snapshot: %v", err)
-			}
-			if update.Side == "" {
-				fmt.Printf("respRaw: %s\n", respRaw)
 			}
 			return k.wsProcessOrderBookUpdateUFutures(update)
 		default:
@@ -212,7 +210,6 @@ func (k *Kraken) wsHandleOrderbookSnapshotUFutures(snapshot UFuturesOBSnapshot) 
 }
 
 func (k *Kraken) wsProcessOrderBookUpdateUFutures(updatePayload UFuturesOBUpdate) error {
-	fmt.Println("update received")
 	update := orderbook.Update{
 		Asset:      asset.USDTMarginedFutures,
 		Pair:       k.GetProductCurrencyPairFromID(updatePayload.ProductID),
@@ -295,7 +292,10 @@ func (k *Kraken) SubscribeUFutures(channelsToSubscribe []stream.ChannelSubscript
 		// the subscribed event from the websocket
 		// k.WebsocketUFutures.AddSuccessfulSubscriptions(sub.Channels...)
 	}
-	return errs
+	if errs != nil {
+		return errs
+	}
+	return nil
 }
 
 func (k *Kraken) UnsubscribeUFutures(channelsToUnsubscribe []stream.ChannelSubscription) error {

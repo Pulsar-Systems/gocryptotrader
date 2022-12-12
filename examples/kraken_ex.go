@@ -47,13 +47,23 @@ func KrakenWSEx() {
 	if err != nil {
 		fmt.Println("k.WebsocketUFutures.Connect ", err)
 	}
-	err = k.WebsocketUFutures.FlushChannels()
-	if err != nil {
-		fmt.Println("k.WebsocketUFutures.FlushChannels", err)
-	}
 	// mu := sync.RWMutex{}
+	// go func() {
+	// 	t := time.NewTicker(time.Millisecond * 100)
+	// 	p := currency.NewPairWithDelimiter("XBT", "USD", "")
+	// 	for range t.C {
+	// 		orb, err := k.WebsocketUFutures.Orderbook.GetOrderbook(p, asset.USDTMarginedFutures)
+	// 		if err != nil {
+	// 			fmt.Println("unable to get orderbook:", err)
+	// 			continue
+	// 		}
+	// 		orb.Asks.SortAsks()
+	// 		fmt.Printf("orb.Asks[:5]: %v\n", orb.Asks[:5])
+	// 	}
+	// }() 
 	go func() {
 		for payload := range k.WebsocketUFutures.ToRoutine {
+			fmt.Printf("%T\n", payload)
 			switch data := payload.(type) {
 			case *orderbook.Depth:
 				base, err := data.Retrieve()
