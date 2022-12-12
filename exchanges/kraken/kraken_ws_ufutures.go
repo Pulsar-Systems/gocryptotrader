@@ -21,9 +21,10 @@ import (
 const (
 	krakenUFuturesWSURL = "wss://futures.kraken.com/ws/v1"
 
-	krakenUFuturesSubscribed = "subscribed"
-	krakenUFuturesAlert      = "alert"
-	krakenUFuturesInfo       = "info"
+	krakenUFuturesSubscribed   = "subscribed"
+	krakenUFuturesUnsubscribed = "unsubscribed"
+	krakenUFuturesAlert        = "alert"
+	krakenUFuturesInfo         = "info"
 )
 
 var (
@@ -128,21 +129,23 @@ func (k *Kraken) wsHandleDataUFutures(respRaw []byte) error {
 		switch event {
 		case stream.Pong, krakenWsHeartbeat, krakenUFuturesAlert, krakenUFuturesInfo:
 			return nil
-		case krakenUFuturesSubscribed:
-			var sub WsSubscribedUFutures
-			err := json.Unmarshal(respRaw, &sub)
-			if err != nil {
-				return fmt.Errorf("%s - err %s unable to parse subscription response: %s",
-					k.Name,
-					err,
-					respRaw)
-			}
-			for _, product := range sub.ProductIDs {
-				k.Websocket.AddSuccessfulSubscriptions(stream.ChannelSubscription{
-					Channel:  sub.Feed,
-					Currency: k.GetProductCurrencyPairFromID(product),
-				})
-			}
+		case krakenUFuturesSubscribed, krakenUFuturesUnsubscribed:
+			return nil
+			// Example of possible handling...
+			// var sub WsSubscribedUFutures
+			// err := json.Unmarshal(respRaw, &sub)
+			// if err != nil {
+			// 	return fmt.Errorf("%s - err %s unable to parse subscription response: %s",
+			// 		k.Name,
+			// 		err,
+			// 		respRaw)
+			// }
+			// for _, product := range sub.ProductIDs {
+			// 	k.Websocket.AddSuccessfulSubscriptions(stream.ChannelSubscription{
+			// 		Channel:  sub.Feed,
+			// 		Currency: k.GetProductCurrencyPairFromID(product),
+			// 	})
+			// }
 		default:
 			k.WebsocketUFutures.DataHandler <- stream.UnhandledMessageWarning{
 				Message: k.Name + stream.UnhandledMessage + string(respRaw),
@@ -288,9 +291,7 @@ func (k *Kraken) SubscribeUFutures(channelsToSubscribe []stream.ChannelSubscript
 			errs = append(errs, err)
 			continue
 		}
-		// Commented this out because we can add successful subscriptions after we receive
-		// the subscribed event from the websocket
-		// k.WebsocketUFutures.AddSuccessfulSubscriptions(sub.Channels...)
+		k.WebsocketUFutures.AddSuccessfulSubscriptions(sub.Channels...)
 	}
 	if errs != nil {
 		return errs
@@ -299,64 +300,39 @@ func (k *Kraken) SubscribeUFutures(channelsToSubscribe []stream.ChannelSubscript
 }
 
 func (k *Kraken) UnsubscribeUFutures(channelsToUnsubscribe []stream.ChannelSubscription) error {
-	var unsubs []WebsocketSubscriptionEventRequest
-channels:
-	for x := range channelsToUnsubscribe {
-		for y := range unsubs {
-			if unsubs[y].Subscription.Name == channelsToUnsubscribe[x].Channel {
-				unsubs[y].Pairs = append(unsubs[y].Pairs,
-					channelsToUnsubscribe[x].Currency.String())
-				unsubs[y].Channels = append(unsubs[y].Channels,
-					channelsToUnsubscribe[x])
-				continue channels
+	// WebsocketSubscriptionEventRequestUFutures was created with only the depth channel in mind
+	// Additional parameters could/should be added for other streams
+	fmt.Println("Unsubscribing from:", channelsToUnsubscribe)
+	var subscriptions = make(map[string]*WebsocketSubscriptionEventRequestUFutures)
+	for _, channel := range channelsToUnsubscribe {
+		pairStr := "PI_" + channel.Currency.Format(currency.PairFormat{Delimiter: "", Uppercase: true}).String()
+		switch channel.Channel {
+		case krakenWsOrderbook:
+			req, ok := subscriptions[channel.Channel]
+			if !ok {
+				subscriptions[channel.Channel] = &WebsocketSubscriptionEventRequestUFutures{
+					Event:      "unsubscribe",
+					Feed:       "book",
+					ProductIds: []string{pairStr},
+					Channels:   []stream.ChannelSubscription{channel},
+				}
+			} else {
+				req.ProductIds = append(req.ProductIds, pairStr)
+				req.Channels = append(req.Channels, channel)
 			}
 		}
-		var depth int64
-		if channelsToUnsubscribe[x].Channel == "book" {
-			depth = krakenWsOrderbookDepth
-		}
-
-		var id int64
-		if common.StringDataContains(authenticatedChannels, channelsToUnsubscribe[x].Channel) {
-			id = k.WebsocketUFutures.AuthConn.GenerateMessageID(false)
-		} else {
-			id = k.WebsocketUFutures.Conn.GenerateMessageID(false)
-		}
-
-		unsub := WebsocketSubscriptionEventRequest{
-			Event: krakenWsUnsubscribe,
-			Pairs: []string{channelsToUnsubscribe[x].Currency.String()},
-			Subscription: WebsocketSubscriptionData{
-				Name:  channelsToUnsubscribe[x].Channel,
-				Depth: depth,
-			},
-			RequestID: id,
-		}
-		if common.StringDataContains(authenticatedChannels, channelsToUnsubscribe[x].Channel) {
-			unsub.Subscription.Token = authToken
-		}
-		unsub.Channels = append(unsub.Channels, channelsToUnsubscribe[x])
-		unsubs = append(unsubs, unsub)
 	}
-
 	var errs common.Errors
-	for i := range unsubs {
-		if common.StringDataContains(authenticatedChannels, unsubs[i].Subscription.Name) {
-			_, err := k.WebsocketUFutures.AuthConn.SendMessageReturnResponse(unsubs[i].RequestID, unsubs[i])
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			k.WebsocketUFutures.RemoveSuccessfulUnsubscriptions(unsubs[i].Channels...)
-			continue
-		}
-
-		_, err := k.WebsocketUFutures.Conn.SendMessageReturnResponse(unsubs[i].RequestID, unsubs[i])
+	for _, sub := range subscriptions {
+		err := k.WebsocketUFutures.Conn.SendJSONMessage(sub)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		k.WebsocketUFutures.RemoveSuccessfulUnsubscriptions(unsubs[i].Channels...)
+		k.WebsocketUFutures.RemoveSuccessfulUnsubscriptions(sub.Channels...)
+		// Commented this out because we can add successful subscriptions after we receive
+		// the subscribed event from the websocket
+		// k.WebsocketUFutures.AddSuccessfulSubscriptions(sub.Channels...)
 	}
 	if errs != nil {
 		return errs
