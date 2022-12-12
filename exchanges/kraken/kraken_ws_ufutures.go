@@ -33,6 +33,12 @@ var (
 	}
 )
 
+// Helper function that derives a currency.Pair instance from Kraken's product formatting
+func (k *Kraken) GetProductCurrencyPairFromID(pi string) currency.Pair {
+	baseStr := strings.Replace(strings.Replace(pi, "PI_", "", -1), "USD", "", -1)
+	return currency.NewPairWithDelimiter(baseStr, "USD", "")
+}
+
 func (k *Kraken) WsConnectUFutures() error {
 	if !k.WebsocketUFutures.IsEnabled() || !k.IsEnabled() {
 		return errors.New(stream.WebsocketNotEnabled)
@@ -56,19 +62,6 @@ func (k *Kraken) WsConnectUFutures() error {
 			k.Name,
 			err)
 	}
-	return nil
-}
-
-func (k *Kraken) wsPingHandlerUFutures() error {
-	message, err := json.Marshal(pingRequest)
-	if err != nil {
-		return err
-	}
-	k.WebsocketUFutures.Conn.SetupPingHandler(stream.PingHandler{
-		Message:     message,
-		Delay:       krakenWsPingDelay,
-		MessageType: websocket.TextMessage,
-	})
 	return nil
 }
 
@@ -141,7 +134,7 @@ func (k *Kraken) wsHandleDataUFutures(respRaw []byte) error {
 			// 		respRaw)
 			// }
 			// for _, product := range sub.ProductIDs {
-			// 	k.Websocket.AddSuccessfulSubscriptions(stream.ChannelSubscription{
+			// 	k.WebsocketUFutures.AddSuccessfulSubscriptions(stream.ChannelSubscription{
 			// 		Channel:  sub.Feed,
 			// 		Currency: k.GetProductCurrencyPairFromID(product),
 			// 	})
@@ -162,7 +155,7 @@ func (k *Kraken) wsHandleDataUFutures(respRaw []byte) error {
 			if err != nil {
 				return fmt.Errorf("unable to unmarshal orderbook snapshot: %v", err)
 			}
-			return k.wsHandleOrderbookSnapshotUFutures(snapshot)
+			return k.wsProcessOrderbookSnapshotUFutures(snapshot)
 		case krakenWsOrderbook:
 			var update UFuturesOBUpdate
 			err := json.Unmarshal(respRaw, &update)
@@ -180,12 +173,20 @@ func (k *Kraken) wsHandleDataUFutures(respRaw []byte) error {
 	return nil
 }
 
-func (k *Kraken) GetProductCurrencyPairFromID(pi string) currency.Pair {
-	baseStr := strings.Replace(strings.Replace(pi, "PI_", "", -1), "USD", "", -1)
-	return currency.NewPairWithDelimiter(baseStr, "USD", "")
+func (k *Kraken) wsPingHandlerUFutures() error {
+	message, err := json.Marshal(pingRequest)
+	if err != nil {
+		return err
+	}
+	k.WebsocketUFutures.Conn.SetupPingHandler(stream.PingHandler{
+		Message:     message,
+		Delay:       krakenWsPingDelay,
+		MessageType: websocket.TextMessage,
+	})
+	return nil
 }
 
-func (k *Kraken) wsHandleOrderbookSnapshotUFutures(snapshot UFuturesOBSnapshot) error {
+func (k *Kraken) wsProcessOrderbookSnapshotUFutures(snapshot UFuturesOBSnapshot) error {
 	base := orderbook.Base{
 		Exchange:        k.Name,
 		Pair:            k.GetProductCurrencyPairFromID(snapshot.ProductID),
