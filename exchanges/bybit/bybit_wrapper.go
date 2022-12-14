@@ -243,20 +243,26 @@ func (by *Bybit) Run() {
 }
 
 // FetchTradablePairs returns a list of the exchanges tradable pairs
-func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) ([]string, error) {
+func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) (currency.Pairs, error) {
 	if !by.SupportsAsset(a) {
 		return nil, fmt.Errorf("asset type of %s is not supported by %s", a, by.Name)
 	}
 
+	var pair currency.Pair
 	switch a {
 	case asset.Spot:
 		allPairs, err := by.GetAllSpotPairs(ctx)
 		if err != nil {
 			return nil, err
 		}
-		pairs := make([]string, len(allPairs))
+		pairs := make([]currency.Pair, len(allPairs))
 		for x := range allPairs {
-			pairs[x] = allPairs[x].BaseCurrency + currency.DashDelimiter + allPairs[x].QuoteCurrency
+			pair, err = currency.NewPairFromStrings(allPairs[x].BaseCurrency,
+				allPairs[x].QuoteCurrency)
+			if err != nil {
+				return nil, err
+			}
+			pairs[x] = pair
 		}
 		return pairs, nil
 	case asset.CoinMarginedFutures:
@@ -264,7 +270,7 @@ func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) ([]string
 		if err != nil {
 			return nil, err
 		}
-		pairs := make([]string, 0, len(allPairs))
+		pairs := make([]currency.Pair, 0, len(allPairs))
 		for x := range allPairs {
 			if allPairs[x].Status != "Trading" || allPairs[x].QuoteCurrency != "USD" {
 				continue
@@ -279,8 +285,12 @@ func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) ([]string
 				continue
 			}
 
-			symbol := allPairs[x].BaseCurrency + currency.DashDelimiter + contractSplit[1]
-			pairs = append(pairs, symbol)
+			pair, err = currency.NewPairFromStrings(allPairs[x].BaseCurrency,
+				contractSplit[1])
+			if err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, pair)
 		}
 		return pairs, nil
 	case asset.USDTMarginedFutures:
@@ -288,16 +298,18 @@ func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) ([]string
 		if err != nil {
 			return nil, err
 		}
-		pairs := make([]string, 0, len(allPairs))
+		pairs := make([]currency.Pair, 0, len(allPairs))
 		for x := range allPairs {
 			if allPairs[x].Status != "Trading" || allPairs[x].QuoteCurrency != "USDT" {
 				continue
 			}
 
-			symbol := allPairs[x].BaseCurrency +
-				currency.DashDelimiter +
-				allPairs[x].QuoteCurrency
-			pairs = append(pairs, symbol)
+			pair, err = currency.NewPairFromStrings(allPairs[x].BaseCurrency,
+				allPairs[x].QuoteCurrency)
+			if err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, pair)
 		}
 		return pairs, nil
 	case asset.Futures:
@@ -305,7 +317,7 @@ func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) ([]string
 		if err != nil {
 			return nil, err
 		}
-		pairs := make([]string, 0, len(allPairs))
+		pairs := make([]currency.Pair, 0, len(allPairs))
 		for x := range allPairs {
 			if allPairs[x].Status != "Trading" {
 				continue
@@ -313,11 +325,15 @@ func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) ([]string
 
 			symbol := allPairs[x].BaseCurrency + allPairs[x].QuoteCurrency
 			filter := strings.Split(allPairs[x].Name, symbol)
-
 			if len(filter) != 2 || filter[1] == "" {
 				continue
 			}
-			pairs = append(pairs, symbol+currency.DashDelimiter+filter[1])
+
+			pair, err = currency.NewPairFromStrings(symbol, filter[1])
+			if err != nil {
+				return nil, err
+			}
+			pairs = append(pairs, pair)
 		}
 		return pairs, nil
 	case asset.USDCMarginedFutures:
@@ -325,9 +341,13 @@ func (by *Bybit) FetchTradablePairs(ctx context.Context, a asset.Item) ([]string
 		if err != nil {
 			return nil, err
 		}
-		pairs := make([]string, len(allPairs))
+		pairs := make([]currency.Pair, len(allPairs))
 		for x := range allPairs {
-			pairs[x] = allPairs[x].BaseCoin + currency.DashDelimiter + "PERP"
+			pair, err = currency.NewPairFromStrings(allPairs[x].BaseCoin, "PERP")
+			if err != nil {
+				return nil, err
+			}
+			pairs[x] = pair
 		}
 		return pairs, nil
 	}
@@ -343,13 +363,7 @@ func (by *Bybit) UpdateTradablePairs(ctx context.Context, forceUpdate bool) erro
 		if err != nil {
 			return err
 		}
-
-		p, err := currency.NewPairsFromStrings(pairs)
-		if err != nil {
-			return err
-		}
-
-		err = by.UpdatePairs(p, assetTypes[i], false, forceUpdate)
+		err = by.UpdatePairs(pairs, assetTypes[i], false, forceUpdate)
 		if err != nil {
 			return err
 		}
