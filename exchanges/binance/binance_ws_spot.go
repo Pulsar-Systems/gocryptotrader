@@ -149,7 +149,7 @@ func (b *Binance) wsHandleData(respRaw []byte) error {
 						b.Name,
 						err)
 				}
-				b.Websocket.DataHandler <- data
+				b.Websocket.DataHandler <- data.Data
 				return nil
 			case "outboundAccountPosition":
 				var data wsAccountPosition
@@ -159,7 +159,7 @@ func (b *Binance) wsHandleData(respRaw []byte) error {
 						b.Name,
 						err)
 				}
-				b.Websocket.DataHandler <- data
+				b.Websocket.DataHandler <- data.Data
 				return nil
 			case "balanceUpdate":
 				var data wsBalanceUpdate
@@ -169,7 +169,7 @@ func (b *Binance) wsHandleData(respRaw []byte) error {
 						b.Name,
 						err)
 				}
-				b.Websocket.DataHandler <- data
+				b.Websocket.DataHandler <- data.Data
 				return nil
 			case "executionReport":
 				var data wsOrderUpdate
