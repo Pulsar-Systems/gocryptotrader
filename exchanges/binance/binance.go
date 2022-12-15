@@ -583,7 +583,7 @@ func (b *Binance) newOrder(ctx context.Context, api string, o *NewOrderRequest, 
 }
 
 // CancelExistingOrder sends a cancel order to Binance
-func (b *Binance) CancelExistingOrder(ctx context.Context, symbol currency.Pair, orderID int64, origClientOrderID string) (CancelOrderResponse, error) {
+func (b *Binance) CancelExistingOrder(ctx context.Context, symbol currency.Pair, orderID, origClientOrderID string) (CancelOrderResponse, error) {
 	var resp CancelOrderResponse
 
 	symbolValue, err := b.FormatSymbol(symbol, asset.Spot)
@@ -593,8 +593,8 @@ func (b *Binance) CancelExistingOrder(ctx context.Context, symbol currency.Pair,
 	params := url.Values{}
 	params.Set("symbol", symbolValue)
 
-	if orderID != 0 {
-		params.Set("orderId", strconv.FormatInt(orderID, 10))
+	if orderID != "" {
+		params.Set("orderId", orderID)
 	}
 
 	if origClientOrderID != "" {
