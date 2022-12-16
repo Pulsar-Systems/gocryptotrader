@@ -6,12 +6,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/thrasher-corp/gocryptotrader/config"
-	"github.com/thrasher-corp/gocryptotrader/currency"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/asset"
 	"github.com/thrasher-corp/gocryptotrader/exchanges/bybit"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/orderbook"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/stream"
+	"github.com/thrasher-corp/gocryptotrader/exchanges/ticker"
 )
 
 func setupBybitAndPrintOrderBook() {
@@ -56,74 +57,24 @@ func setupBybitAndPrintOrderBook() {
 	fmt.Printf("by.WebsocketUFuture.GetWebsocketURL(): %v\n", by.WebsocketUFuture.GetWebsocketURL())
 	fmt.Printf("Asset UFuture enabled: %v\n", by.CurrencyPairs.IsAssetEnabled(asset.USDTMarginedFutures) == nil)
 
-	p := currency.Pair{
-		Delimiter: "-",
-		Base:      currency.ETH,
-		Quote:     currency.USDT,
-	}
-	// Wait for the Orderbook to be fetched
-	ticker := time.NewTicker(time.Second * 1)
-	for range ticker.C {
-		// orbRest1, err := by.GetOrderBook(context.TODO(), "ETHUSDT", 10)
-		// if err != nil {
-		// 	fmt.Printf("GetOrderbook REST1: %v\n", err)
-		// 	panic(0)
-		// }
-		// orbRest2, err := by.GetFuturesOrderbook(context.TODO(), p)
-		// if err != nil {
-		// 	fmt.Printf("GetOrderbook REST2: %v\n", err)
-		// }
-
-		// orbWs1, err := by.Websocket.Orderbook.GetOrderbook(p, asset.Spot)
-		// orbWs1, err := by.FetchOrderbook(context.TODO(), p, asset.Spot)
-		// if err != nil {
-		// 	fmt.Printf("GetOrderbook WS1: %v\n", err)
-		// 	panic(0)
-		// }
-		orbWs2, err := by.WebsocketUFuture.Orderbook.GetOrderbook(p, asset.USDTMarginedFutures)
-		if err != nil {
-			fmt.Printf("GetOrderbook WS2: %v\n", err)
-			continue
+	go func() {
+		for payload := range by.WebsocketUFuture.ToRoutine {
+			switch data := payload.(type) {
+			case error:
+				fmt.Printf("error received: %v, of type %T\n", payload, payload)
+			case *orderbook.Depth:
+				base, err := data.Retrieve()
+				if err != nil {
+					fmt.Println("unable to retrieve ob base from depth, got error:", err)
+				}
+				fmt.Printf("data.Asks[:5]: %v\n", base.Asks[:5])
+			case *ticker.Price, stream.KlineData:
+				continue
+			default:
+				fmt.Printf("unhandled data received:%T\n", data)
+			}
 		}
-
-		// fmt.Printf("orbRest1.LastUpdateID: %v\n", orbRest1.Time)
-		fmt.Printf("orbWs2.LastUpdateID: %v\n", orbWs2.LastUpdated)
-		// fmt.Println("Diff:", orbRest1.Time.UnixMicro()-orbWs1.LastUpdated.UnixMicro())
-		// fmt.Printf("orbRest1.Bids: ")
-		// for _, b := range orbRest1.Bids[:5] {
-		// 	fmt.Printf("{%v %v}, ", b.Price, b.Amount)
-		// }
-		// fmt.Println()
-		fmt.Printf("orbWs2.Bids  : ")
-		for _, b := range orbWs2.Bids[:5] {
-			fmt.Printf("{%v %v}, ", b.Price, b.Amount)
-		}
-		fmt.Println()
-
-		// _ = orbWs1
-		// _ = orbWs2
-
-		// t, err := by.FetchTicker(context.TODO(), p, a)
-		// if err != nil {
-		// 	fmt.Printf("FetchTicker: %v\n", err)
-		// }
-		// Update ticker then print it
-		// by.UpdateTicker(context.TODO(), p, a)
-		// fmt.Printf("t: %v\n", t)
-		// // Check if the orderbook is written to an unexpected asset type
-		// if a == asset.USDTMarginedFutures {
-		// 	norb, err := by.Websocket.Orderbook.GetOrderbook(p, asset.Spot)
-		// 	// Should throw an error
-		// 	if err == nil {
-		// 		fmt.Println("An orderbook is stored under Spot rather than Futures!", norb)
-		// 	}
-		// } else {
-		// 	norb, err := by.Websocket.Orderbook.GetOrderbook(p, asset.USDTMarginedFutures)
-		// 	if err == nil {
-		// 		fmt.Println("An orderbook is stored under Futures rather than Spot!", norb)
-		// 	}
-		// }
-	}
+	}()
 }
 
 func bybitMain() {
