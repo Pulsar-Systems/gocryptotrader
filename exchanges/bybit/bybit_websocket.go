@@ -450,7 +450,7 @@ func (by *Bybit) wsHandleData(respRaw []byte) error {
 
 			switch e {
 			case wsAccountInfo:
-				var data []wsAccount
+				var data []WsAccount
 				err := json.Unmarshal(respRaw, &data)
 				if err != nil {
 					return fmt.Errorf("%v - Could not convert to outboundAccountInfo structure %w",

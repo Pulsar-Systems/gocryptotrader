@@ -507,8 +507,8 @@ type WsTrade struct {
 	TradeData  WsTradeData `json:"data"`
 }
 
-// wsAccount defines websocket account info data
-type wsAccount struct {
+// WsAccount defines websocket account info data
+type WsAccount struct {
 	EventType   string       `json:"e"`
 	EventTime   string       `json:"E"`
 	CanTrade    bool         `json:"T"`
