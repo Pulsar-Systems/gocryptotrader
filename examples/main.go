@@ -47,10 +47,14 @@ func main() {
 		switch d := payload.(type) {
 		case error:
 			fmt.Println("error received", d)
+		case huobi.WsCurrencyUpdate:
+			fmt.Printf("d.Currency: %v\n", d.Currency)
+			fmt.Printf("d.Available: %v\n", d.Available)
 		case stream.UnhandledMessageWarning:
 			fmt.Println("unhandled message warning:", d)
 		case *order.Detail:
 			fmt.Println("order received with price:", d.Price)
+			fmt.Println(d)
 		default:
 			fmt.Printf("unknown data received of type %T\n", d)
 		}

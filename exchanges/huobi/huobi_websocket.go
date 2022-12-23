@@ -209,7 +209,8 @@ func (h *HUOBI) wsHandleData(respRaw []byte) error {
 	if init.Subscribed != "" ||
 		init.UnSubscribed != "" ||
 		init.Op == "sub" ||
-		init.Op == "unsub" {
+		init.Op == "unsub" ||
+		init.Action == "sub" {
 		// TODO handle subs
 		return nil
 	}
@@ -218,12 +219,15 @@ func (h *HUOBI) wsHandleData(respRaw []byte) error {
 		return nil
 	}
 
-	if init.Op == "ping" {
-		authPing := authenticationPing{
-			OP: "pong",
-			TS: init.TS,
+	if init.Action == "ping" {
+		var ping authenticationPing
+		err := json.Unmarshal(respRaw, &ping)
+		if err != nil {
+			h.Websocket.DataHandler <- err
+			return nil
 		}
-		err := h.Websocket.AuthConn.SendJSONMessage(authPing)
+		ping.Action = "pong"
+		err = h.Websocket.AuthConn.SendJSONMessage(ping)
 		if err != nil {
 			log.Error(log.ExchangeSys, err)
 		}
@@ -248,76 +252,59 @@ func (h *HUOBI) wsHandleData(respRaw []byte) error {
 	}
 
 	switch {
-	case strings.EqualFold(init.Op, authOp):
+	case strings.EqualFold(init.Channel, authOp):
 		h.Websocket.SetCanUseAuthenticatedEndpoints(true)
 		// Auth captured
 		return nil
-	case strings.EqualFold(init.Topic, "accounts"):
-		var response WsAuthenticatedAccountsResponse
+	case strings.EqualFold(init.Channel, "accounts.update#2"):
+		fmt.Println(string(respRaw))
+		var response WsNewAuthenticatedAccountsResponse
 		err := json.Unmarshal(respRaw, &response)
 		if err != nil {
 			return err
 		}
-		h.Websocket.DataHandler <- response
-
-	case strings.Contains(init.Topic, "orders") &&
-		strings.Contains(init.Topic, "update"):
-		var response WsAuthenticatedOrdersUpdateResponse
+		h.Websocket.DataHandler <- response.Data
+	case strings.Contains(init.Channel, "orders"):
+		var response WsNewAuthenticatedOrdersUpdateResponse
 		err := json.Unmarshal(respRaw, &response)
 		if err != nil {
 			return err
 		}
-		data := strings.Split(response.Topic, ".")
-		if len(data) < 2 {
-			return errors.New(h.Name +
-				" - currency could not be extracted from response")
-		}
-		orderID := strconv.FormatInt(response.Data.OrderID, 10)
-		var oSide order.Side
-		oSide, err = stringToOrderSide(response.Data.OrderType)
-		if err != nil {
-			h.Websocket.DataHandler <- order.ClassificationError{
-				Exchange: h.Name,
-				OrderID:  orderID,
-				Err:      err,
-			}
-		}
-		var oType order.Type
-		oType, err = stringToOrderType(response.Data.OrderType)
-		if err != nil {
-			h.Websocket.DataHandler <- order.ClassificationError{
-				Exchange: h.Name,
-				OrderID:  orderID,
-				Err:      err,
-			}
-		}
-		var oStatus order.Status
-		oStatus, err = stringToOrderStatus(response.Data.OrderState)
-		if err != nil {
-			h.Websocket.DataHandler <- order.ClassificationError{
-				Exchange: h.Name,
-				OrderID:  orderID,
-				Err:      err,
-			}
-		}
-		var p currency.Pair
-		var a asset.Item
-		p, a, err = h.GetRequestFormattedPairAndAssetType(data[1])
+		typeSplit := strings.Split(response.Data.Type, "-")
+		side, err := stringToOrderSide(typeSplit[0])
 		if err != nil {
 			return err
+		}
+		oType, err := stringToOrderType(typeSplit[1])
+		if err != nil {
+			return err
+		}
+		status, err := stringToOrderStatus(response.Data.Status)
+		if err != nil {
+			return err
+		}
+		p, err := currency.NewPairFromString(response.Data.Symbol)
+		if err != nil {
+			return err
+		}
+		var lastUpdated int64
+		if response.Data.LastActTime > response.Data.CreateTime {
+			lastUpdated = response.Data.LastActTime
+		} else {
+			lastUpdated = response.Data.CreateTime
 		}
 		h.Websocket.DataHandler <- &order.Detail{
 			Price:           response.Data.Price,
-			Amount:          response.Data.UnfilledAmount + response.Data.FilledAmount,
-			ExecutedAmount:  response.Data.FilledAmount,
-			RemainingAmount: response.Data.UnfilledAmount,
+			Amount:          response.Data.Size,
+			ExecutedAmount:  response.Data.ExecutedAmount,
+			RemainingAmount: response.Data.RemainingAmount,
 			Exchange:        h.Name,
-			OrderID:         orderID,
+			OrderID:         fmt.Sprint(response.Data.OrderID),
 			Type:            oType,
-			Side:            oSide,
-			Status:          oStatus,
-			AssetType:       a,
-			LastUpdated:     time.Unix(response.TS*1000, 0),
+			Side:            side,
+			Status:          status,
+			AssetType:       asset.Spot,
+			LastUpdated:     time.UnixMilli(lastUpdated),
 			Pair:            p,
 		}
 
@@ -514,11 +501,15 @@ func (h *HUOBI) WsProcessOrderbook(update *WsDepth, symbol string) error {
 // GenerateDefaultSubscriptions Adds default subscriptions to websocket to be handled by ManageSubscriptions()
 func (h *HUOBI) GenerateDefaultSubscriptions() ([]stream.ChannelSubscription, error) {
 	var channels = []string{}
+	// var channels = []string{wsMarketKline,
+	// 	wsMarketDepth,
+	// 	wsMarketTrade,
+	// 	wsMarketTicker}
 	var subscriptions []stream.ChannelSubscription
 	if h.Websocket.CanUseAuthenticatedEndpoints() {
 		channels = append(channels, "orders#%v")
 		subscriptions = append(subscriptions, stream.ChannelSubscription{
-			Channel: "accounts.update",
+			Channel: "accounts.update#2",
 		})
 	}
 	enabledCurrencies, err := h.GetEnabledPairs(asset.Spot)

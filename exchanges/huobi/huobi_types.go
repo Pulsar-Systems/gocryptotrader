@@ -792,9 +792,11 @@ type WsRequest struct {
 // WsResponse defines a response from the websocket connection when there
 // is an error
 type WsResponse struct {
-	Op     string `json:"op"`
-	TS     int64  `json:"ts"`
-	Status string `json:"status"`
+	Action string      `json:"action"` // Authenticated streams only
+	Data   interface{} `json:"data"`
+	Op     string      `json:"op"`
+	TS     int64       `json:"ts"`
+	Status string      `json:"status"`
 	// ErrorCode returns either an integer or a string
 	ErrorCode    interface{} `json:"err-code"`
 	ErrorMessage string      `json:"err-msg"`
@@ -977,6 +979,23 @@ type WsAuthenticatedAccountsResponse struct {
 	Data WsAuthenticatedAccountsResponseData `json:"data"`
 }
 
+type WsNewAuthenticatedAccountsResponse struct {
+	Action  string           `json:"action"`
+	Channel string           `json:"ch"`
+	Data    WsCurrencyUpdate `json:"data"`
+}
+
+type WsCurrencyUpdate struct {
+	Currency    string  `json:"currency"`
+	AccountID   int     `json:"accountId"`
+	Balance     float64 `json:"balance,string"`
+	Available   float64 `json:"available,string"`
+	ChangeType  string  `json:"changeType"`
+	AccountType string  `json:"accountType"`
+	SeqNum      int     `json:"seqNum"`
+	ChangeTime  int64   `json:"changeTime"`
+}
+
 // WsAuthenticatedAccountsResponseData account data
 type WsAuthenticatedAccountsResponseData struct {
 	Event string                                    `json:"event"`
@@ -1082,8 +1101,35 @@ type WsPong struct {
 }
 
 type authenticationPing struct {
-	OP string `json:"op"`
-	TS int64  `json:"ts"`
+	Action string   `json:"action"`
+	Data   pongData `json:"data"`
+}
+
+type pongData struct {
+	Ts int64 `json:"ts"`
+}
+
+type WsNewAuthenticatedOrdersUpdateResponse struct {
+	Action string      `json:"action"`
+	Ch     string      `json:"ch"`
+	Data   wsOrderInfo `json:"data"`
+}
+
+type wsOrderInfo struct {
+	AccountID       int64   `json:"accountId"`
+	Price           float64 `json:"orderPrice,string"`
+	Size            float64 `json:"orderSize,string"`
+	ExecutedAmount  float64 `json:"execAmt,string"`
+	RemainingAmount float64 `json:"remainAmt,string"`
+	Source          string  `json:"orderSource"`
+	CreateTime      int64   `json:"orderCreateTime"`
+	LastActTime     int64   `json:"lastActTime"`
+	EventType       string  `json:"eventType"`
+	Symbol          string  `json:"symbol"`
+	Type            string  `json:"type"`
+	ClientOrderID   string  `json:"clientOrderId"`
+	Status          string  `json:"orderStatus"`
+	OrderID         int64   `json:"orderId"`
 }
 
 // OrderVars stores side, status and type for any order/trade
