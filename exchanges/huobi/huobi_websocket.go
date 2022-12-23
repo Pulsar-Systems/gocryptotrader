@@ -35,7 +35,7 @@ const (
 	wsMarketTrade  = "market.%s.trade.detail"
 	wsMarketTicker = "market.%s.detail"
 
-	wsAccountsOrdersEndPoint = "/ws/v1"
+	wsAccountsOrdersEndPoint = "/ws/v2"
 	wsAccountsList           = "accounts.list"
 	wsOrdersList             = "orders.list"
 	wsOrdersDetail           = "orders.detail"
@@ -47,7 +47,7 @@ const (
 	wsDateTimeFormatting = "2006-01-02T15:04:05"
 
 	signatureMethod  = "HmacSHA256"
-	signatureVersion = "2"
+	signatureVersion = "2.1"
 	requestOp        = "req"
 	authOp           = "auth"
 
@@ -68,7 +68,6 @@ func (h *HUOBI) WsConnect() error {
 	if err != nil {
 		return err
 	}
-
 	if h.Websocket.CanUseAuthenticatedEndpoints() {
 		err = h.wsAuthenticatedDial(&dialer)
 		if err != nil {
@@ -514,15 +513,12 @@ func (h *HUOBI) WsProcessOrderbook(update *WsDepth, symbol string) error {
 
 // GenerateDefaultSubscriptions Adds default subscriptions to websocket to be handled by ManageSubscriptions()
 func (h *HUOBI) GenerateDefaultSubscriptions() ([]stream.ChannelSubscription, error) {
-	var channels = []string{wsMarketKline,
-		wsMarketDepth,
-		wsMarketTrade,
-		wsMarketTicker}
+	var channels = []string{}
 	var subscriptions []stream.ChannelSubscription
 	if h.Websocket.CanUseAuthenticatedEndpoints() {
-		channels = append(channels, "orders.%v", "orders.%v.update")
+		channels = append(channels, "orders#%v")
 		subscriptions = append(subscriptions, stream.ChannelSubscription{
-			Channel: "accounts",
+			Channel: "accounts.update",
 		})
 	}
 	enabledCurrencies, err := h.GetEnabledPairs(asset.Spot)
@@ -555,7 +551,7 @@ func (h *HUOBI) Subscribe(channelsToSubscribe []stream.ChannelSubscription) erro
 	}
 	var errs common.Errors
 	for i := range channelsToSubscribe {
-		if (strings.Contains(channelsToSubscribe[i].Channel, "orders.") ||
+		if (strings.Contains(channelsToSubscribe[i].Channel, "orders#") ||
 			strings.Contains(channelsToSubscribe[i].Channel, "accounts")) && creds != nil {
 			err := h.wsAuthenticatedSubscribe(creds,
 				"sub",
@@ -625,10 +621,10 @@ func (h *HUOBI) Unsubscribe(channelsToUnsubscribe []stream.ChannelSubscription) 
 
 func (h *HUOBI) wsGenerateSignature(creds *account.Credentials, timestamp, endpoint string) ([]byte, error) {
 	values := url.Values{}
-	values.Set("AccessKeyId", creds.Key)
-	values.Set("SignatureMethod", signatureMethod)
-	values.Set("SignatureVersion", signatureVersion)
-	values.Set("Timestamp", timestamp)
+	values.Set("accessKey", creds.Key)
+	values.Set("signatureMethod", signatureMethod)
+	values.Set("signatureVersion", signatureVersion)
+	values.Set("timestamp", timestamp)
 	host := "api.huobi.pro"
 	payload := fmt.Sprintf("%s\n%s\n%s\n%s",
 		http.MethodGet, host, endpoint, values.Encode())
@@ -643,21 +639,24 @@ func (h *HUOBI) wsLogin(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
 	h.Websocket.SetCanUseAuthenticatedEndpoints(true)
 	timestamp := time.Now().UTC().Format(wsDateTimeFormatting)
-	request := WsAuthenticationRequest{
-		Op:               authOp,
-		AccessKeyID:      creds.Key,
-		SignatureMethod:  signatureMethod,
-		SignatureVersion: signatureVersion,
-		Timestamp:        timestamp,
+	request := WsNewAuthenticationRequest{
+		Action:  requestOp,
+		Channel: authOp,
+		Params: AuthReqParams{
+			AuthType:         "api",
+			AccessKey:        creds.Key,
+			SignatureMethod:  signatureMethod,
+			SignatureVersion: signatureVersion,
+			Timestamp:        timestamp,
+		},
 	}
 	hmac, err := h.wsGenerateSignature(creds, timestamp, wsAccountsOrdersEndPoint)
 	if err != nil {
 		return err
 	}
-	request.Signature = crypto.Base64Encode(hmac)
+	request.Params.Signature = crypto.Base64Encode(hmac)
 	err = h.Websocket.AuthConn.SendJSONMessage(request)
 	if err != nil {
 		h.Websocket.SetCanUseAuthenticatedEndpoints(false)
@@ -669,20 +668,16 @@ func (h *HUOBI) wsLogin(ctx context.Context) error {
 }
 
 func (h *HUOBI) wsAuthenticatedSubscribe(creds *account.Credentials, operation, endpoint, topic string) error {
-	timestamp := time.Now().UTC().Format(wsDateTimeFormatting)
-	request := WsAuthenticatedSubscriptionRequest{
-		Op:               operation,
-		AccessKeyID:      creds.Key,
-		SignatureMethod:  signatureMethod,
-		SignatureVersion: signatureVersion,
-		Timestamp:        timestamp,
-		Topic:            topic,
+	// timestamp := time.Now().UTC().Format(wsDateTimeFormatting)
+	request := WsNewAuthenticatedSubscriptionRequest{
+		Action:  operation,
+		Channel: topic,
 	}
-	hmac, err := h.wsGenerateSignature(creds, timestamp, endpoint)
-	if err != nil {
-		return err
-	}
-	request.Signature = crypto.Base64Encode(hmac)
+	// hmac, err := h.wsGenerateSignature(creds, timestamp, endpoint)
+	// if err != nil {
+	// 	return err
+	// }
+	// request.Signature = crypto.Base64Encode(hmac)
 	return h.Websocket.AuthConn.SendJSONMessage(request)
 }
 

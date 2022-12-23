@@ -886,6 +886,27 @@ type WsAuthenticationRequest struct {
 	ClientID         int64  `json:"cid,string,omitempty"`
 }
 
+type WsNewAuthenticationRequest struct {
+	Action  string        `json:"action"`
+	Channel string        `json:"ch"`
+	Params  AuthReqParams `json:"params"`
+}
+
+// type WsNewAuthenticationRequest struct {
+// 	Action  string        `json:"action"`
+// 	Channel string        `json:"ch"`
+// 	Params  AuthReqParams `json:"params"`
+// }
+
+type AuthReqParams struct {
+	AuthType         string `json:"authType"`
+	AccessKey        string `json:"accessKey"`
+	SignatureMethod  string `json:"signatureMethod"`
+	SignatureVersion string `json:"signatureVersion"`
+	Timestamp        string `json:"timestamp"`
+	Signature        string `json:"signature"`
+}
+
 // WsMessage defines read data from the websocket connection
 type WsMessage struct {
 	Raw []byte
@@ -902,6 +923,11 @@ type WsAuthenticatedSubscriptionRequest struct {
 	Signature        string `json:"Signature"`
 	Topic            string `json:"topic"`
 	ClientID         int64  `json:"cid,string,omitempty"`
+}
+
+type WsNewAuthenticatedSubscriptionRequest struct {
+	Action  string `json:"action"`
+	Channel string `json:"ch"`
 }
 
 // WsAuthenticatedAccountsListRequest request for account list authenticated connection
